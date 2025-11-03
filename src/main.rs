@@ -8,6 +8,7 @@ use argon2::{
     Argon2, Params,
 };
 use clap::{Parser, Subcommand};
+use rand_core::RngCore;
 use rpassword::read_password;
 use std::{
     fs::File,
@@ -20,6 +21,7 @@ use thiserror::Error;
 use zeroize::Zeroizing;
 
 // --- Define Constants ---
+const MAGIC_BYTES: &[u8] = b"SCRYPTv1"; // NEW: Magic number to identify our files
 const NONCE_LEN: usize = 12; // AES-GCM standard nonce size is 96 bits
 const MAX_SALT_LEN: usize = 1024; // Sanity limit for salt length to prevent DoS
 
@@ -112,20 +114,23 @@ fn encrypt_file(input_path: &PathBuf, output_path: &PathBuf) -> Result<(), Crypt
     let salt = SaltString::generate(&mut ArgonRng);
     let key = derive_key(password.as_bytes(), &salt)?;
 
-    // CORRECTED: Dereference `key` to get the inner [u8; 32] array.
     let cipher = Aes256Gcm::new(&(*key).into());
-    let nonce_bytes = rand::random::<[u8; NONCE_LEN]>();
+
+    // CHANGED: Explicitly use a CSPRNG for nonce generation
+    let mut nonce_bytes = [0u8; NONCE_LEN];
+    ArgonRng.fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from(nonce_bytes);
+
     let ciphertext = cipher
         .encrypt(&nonce, plaintext.as_ref())
         .map_err(|e| CryptorError::Cryptography(e.to_string()))?;
-
-    // No manual zeroize needed! `password` and `key` will be zeroed on drop.
 
     write_atomically(output_path, |file| {
         let salt_str = salt.as_str();
         let salt_len = salt_str.len() as u16;
 
+        // NEW: Write the magic number first
+        file.write_all(MAGIC_BYTES)?;
         file.write_all(&salt_len.to_le_bytes())?;
         file.write_all(salt_str.as_bytes())?;
         file.write_all(&nonce_bytes)?;
@@ -145,6 +150,13 @@ fn decrypt_file(input_path: &PathBuf, output_path: &PathBuf) -> Result<(), Crypt
     };
 
     let mut file = File::open(input_path)?;
+
+    // NEW: Read and verify the magic number
+    let mut magic_buf = [0u8; MAGIC_BYTES.len()];
+    file.read_exact(&mut magic_buf)?;
+    if magic_buf != MAGIC_BYTES {
+        return Err(CryptorError::InvalidFormat);
+    }
 
     let mut salt_len_bytes = [0u8; 2];
     file.read_exact(&mut salt_len_bytes)?;
@@ -168,16 +180,11 @@ fn decrypt_file(input_path: &PathBuf, output_path: &PathBuf) -> Result<(), Crypt
 
     let key = derive_key(password.as_bytes(), &salt)?;
 
-    // `password` is zeroized here as it goes out of scope.
-
-    // CORRECTED: Dereference `key` to get the inner [u8; 32] array.
     let cipher = Aes256Gcm::new(&(*key).into());
     let nonce = Nonce::from(nonce_bytes);
     let plaintext = cipher
         .decrypt(&nonce, ciphertext.as_ref())
         .map_err(|_| CryptorError::Decryption)?;
-
-    // `key` is zeroized here as it goes out of scope.
 
     write_atomically(output_path, |file| {
         file.write_all(&plaintext)?;
@@ -198,7 +205,6 @@ fn derive_key(password: &[u8], salt: &SaltString) -> Result<Zeroizing<[u8; 32]>,
     );
 
     let mut key = Zeroizing::new([0u8; 32]);
-    // CORRECTED: Mutably dereference `key` to pass a `&mut [u8]` slice.
     argon2.hash_password_into(password, salt.as_str().as_bytes(), &mut *key)?;
     Ok(key)
 }
@@ -232,7 +238,8 @@ fn get_and_validate_password() -> Result<Zeroizing<String>, CryptorError> {
     std::io::stdout().flush()?;
     let pass2 = Zeroizing::new(read_password()?);
 
-    if pass1.as_bytes().ct_eq(pass2.as_bytes()).unwrap_u8() != 1 {
+    // CHANGED: Use idiomatic boolean conversion for subtle::Choice
+    if !bool::from(pass1.as_bytes().ct_eq(pass2.as_bytes())) {
         return Err(CryptorError::PasswordValidation("Passwords do not match.".to_string()));
     }
 
