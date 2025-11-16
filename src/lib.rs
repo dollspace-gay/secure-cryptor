@@ -28,6 +28,7 @@
 pub mod config;
 pub mod crypto;
 pub mod error;
+pub mod progress;
 pub mod storage;
 pub mod validation;
 
@@ -35,8 +36,12 @@ pub mod validation;
 pub use config::{CryptoConfig, MAGIC_BYTES, NONCE_LEN};
 pub use crypto::aes_gcm::AesGcmEncryptor;
 pub use crypto::kdf::{Argon2Kdf, generate_salt_string};
+pub use crypto::streaming::{
+    ChunkedDecryptor, ChunkedEncryptor, ChunkedReader, StreamConfig, StreamHeader, MAGIC_BYTES_V2,
+};
 pub use crypto::{Encryptor, KeyDerivation};
 pub use error::{CryptorError, Result};
+pub use progress::{format_bytes, format_duration, ProgressCallback, ProgressReporter, ProgressTracker};
 pub use validation::{get_and_validate_password, get_password, validate_password};
 
 use argon2::password_hash::rand_core::OsRng as ArgonRng;

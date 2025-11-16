@@ -14,7 +14,10 @@
       "Bash(bd close:*)",
       "Bash(cargo build:*)",
       "Bash(cargo test:*)",
-      "Bash(bd show:*)"
+      "Bash(bd show:*)",
+      "Bash(if not exist benches mkdir benches)",
+      "Bash(cargo bench:*)",
+      "Bash(cargo fix:*)"
     ],
     "deny": [],
     "ask": []
