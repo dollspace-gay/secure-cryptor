@@ -126,6 +126,39 @@ enum Mode {
     Decrypt,
 }
 
+#[derive(Clone)]
+enum QueueStatus {
+    Pending,
+    Processing,
+    Completed,
+    Failed(String),
+}
+
+#[derive(Clone)]
+struct QueueItem {
+    input_path: String,
+    output_path: String,
+    mode: Mode,
+    password: String,
+    use_compression: bool,
+    status: QueueStatus,
+    progress: f32,
+}
+
+impl QueueItem {
+    fn new(input_path: String, output_path: String, mode: Mode, password: String, use_compression: bool) -> Self {
+        Self {
+            input_path,
+            output_path,
+            mode,
+            password,
+            use_compression,
+            status: QueueStatus::Pending,
+            progress: 0.0,
+        }
+    }
+}
+
 struct CryptorApp {
     mode: Option<Mode>,
     input_path: String,
@@ -139,6 +172,9 @@ struct CryptorApp {
     runtime: Option<Runtime>,
     settings: Settings,
     show_settings: bool,
+    queue: Vec<QueueItem>,
+    is_processing_queue: bool,
+    show_queue_panel: bool,
 }
 
 impl Default for CryptorApp {
@@ -164,6 +200,9 @@ impl CryptorApp {
             runtime: None,
             settings: settings.clone(),
             show_settings: false,
+            queue: Vec::new(),
+            is_processing_queue: false,
+            show_queue_panel: false,
         };
 
         // If initial file is provided, set it up
@@ -226,6 +265,269 @@ impl CryptorApp {
             self.output_path = path.display().to_string();
             self.status_message = format!("Output: {}", path.display());
         }
+    }
+
+    fn add_to_queue(&mut self) {
+        // Validation
+        if self.input_path.is_empty() {
+            self.status_message = "Error: No input file selected".to_string();
+            return;
+        }
+
+        if self.output_path.is_empty() {
+            self.status_message = "Error: No output file specified".to_string();
+            return;
+        }
+
+        if self.password.is_empty() {
+            self.status_message = "Error: Password required".to_string();
+            return;
+        }
+
+        if let Some(Mode::Encrypt) = self.mode {
+            if self.password != self.confirm_password {
+                self.status_message = "Error: Passwords do not match".to_string();
+                return;
+            }
+
+            if let Err(e) = validate_password(&self.password) {
+                self.status_message = format!("Error: {}", e);
+                return;
+            }
+        }
+
+        // Add to queue
+        let item = QueueItem::new(
+            self.input_path.clone(),
+            self.output_path.clone(),
+            self.mode.clone().unwrap(),
+            self.password.clone(),
+            self.use_compression,
+        );
+
+        self.queue.push(item);
+        self.status_message = format!("Added to queue: {}", self.input_path);
+        self.show_queue_panel = true;
+
+        // Clear fields for next file
+        self.input_path.clear();
+        self.output_path.clear();
+        self.password.clear();
+        self.confirm_password.clear();
+    }
+
+    fn process_queue(&mut self) {
+        if self.queue.is_empty() {
+            self.status_message = "Queue is empty".to_string();
+            return;
+        }
+
+        self.is_processing_queue = true;
+
+        // Get or create runtime
+        let rt = self.runtime.get_or_insert_with(|| {
+            tokio::runtime::Runtime::new().expect("Failed to create runtime")
+        });
+
+        // Process each item in the queue
+        for item in &mut self.queue {
+            if matches!(item.status, QueueStatus::Completed) {
+                continue;
+            }
+
+            item.status = QueueStatus::Processing;
+            item.progress = 0.0;
+
+            let result = match item.mode {
+                Mode::Encrypt => rt.block_on(async {
+                    encrypt_file(&item.input_path, &item.output_path, &item.password, item.use_compression)
+                }),
+                Mode::Decrypt => rt.block_on(async {
+                    decrypt_file(&item.input_path, &item.output_path, &item.password)
+                }),
+            };
+
+            match result {
+                Ok(_) => {
+                    item.status = QueueStatus::Completed;
+                    item.progress = 1.0;
+                }
+                Err(e) => {
+                    item.status = QueueStatus::Failed(e.to_string());
+                    item.progress = 0.0;
+                }
+            }
+        }
+
+        self.is_processing_queue = false;
+        self.status_message = "Queue processing complete".to_string();
+    }
+
+    fn clear_queue(&mut self) {
+        self.queue.clear();
+        self.status_message = "Queue cleared".to_string();
+    }
+
+    fn remove_from_queue(&mut self, index: usize) {
+        if index < self.queue.len() {
+            self.queue.remove(index);
+            self.status_message = "Item removed from queue".to_string();
+        }
+    }
+
+    fn render_queue_panel(&mut self, ctx: &egui::Context) {
+        egui::Window::new("Batch Queue")
+            .fixed_size([700.0, 500.0])
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                let panel_frame = egui::Frame::default()
+                    .fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, self.settings.panel_transparency))
+                    .rounding(egui::Rounding::same(15.0))
+                    .inner_margin(egui::Margin::same(20.0));
+
+                panel_frame.show(ui, |ui| {
+                    ui.heading(egui::RichText::new("Batch Operations Queue")
+                        .size(24.0)
+                        .color(egui::Color32::from_rgb(50, 50, 50)));
+
+                    ui.add_space(15.0);
+
+                    ui.label(egui::RichText::new(format!("Items in queue: {}", self.queue.len()))
+                        .size(14.0)
+                        .color(egui::Color32::from_rgb(80, 80, 80)));
+
+                    ui.add_space(10.0);
+
+                    // Queue items list
+                    egui::ScrollArea::vertical()
+                        .max_height(300.0)
+                        .show(ui, |ui| {
+                            let mut items_to_remove = Vec::new();
+
+                            for (index, item) in self.queue.iter().enumerate() {
+                                ui.group(|ui| {
+                                    ui.set_min_width(640.0);
+
+                                    ui.horizontal(|ui| {
+                                        // Status icon
+                                        let (status_icon, status_color) = match &item.status {
+                                            QueueStatus::Pending => ("⏳", egui::Color32::from_rgb(200, 200, 200)),
+                                            QueueStatus::Processing => ("⚙", egui::Color32::from_rgb(91, 206, 250)),
+                                            QueueStatus::Completed => ("✓", egui::Color32::from_rgb(100, 200, 100)),
+                                            QueueStatus::Failed(_) => ("✗", egui::Color32::from_rgb(255, 100, 100)),
+                                        };
+
+                                        ui.label(egui::RichText::new(status_icon)
+                                            .size(18.0)
+                                            .color(status_color));
+
+                                        ui.vertical(|ui| {
+                                            // File path
+                                            let filename = std::path::Path::new(&item.input_path)
+                                                .file_name()
+                                                .and_then(|n| n.to_str())
+                                                .unwrap_or(&item.input_path);
+
+                                            ui.label(egui::RichText::new(filename)
+                                                .size(14.0)
+                                                .color(egui::Color32::from_rgb(50, 50, 50)));
+
+                                            // Mode indicator
+                                            let mode_text = match item.mode {
+                                                Mode::Encrypt => "Encrypt",
+                                                Mode::Decrypt => "Decrypt",
+                                            };
+                                            ui.label(egui::RichText::new(mode_text)
+                                                .size(11.0)
+                                                .color(egui::Color32::from_rgb(120, 120, 120)));
+
+                                            // Error message if failed
+                                            if let QueueStatus::Failed(err) = &item.status {
+                                                ui.label(egui::RichText::new(format!("Error: {}", err))
+                                                    .size(11.0)
+                                                    .color(egui::Color32::from_rgb(255, 100, 100)));
+                                            }
+                                        });
+
+                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                            // Remove button
+                                            if !matches!(item.status, QueueStatus::Processing) {
+                                                let remove_btn = egui::Button::new(
+                                                    egui::RichText::new("✗").size(14.0).color(egui::Color32::WHITE)
+                                                )
+                                                .fill(egui::Color32::from_rgb(245, 169, 184))
+                                                .min_size(egui::vec2(30.0, 30.0))
+                                                .rounding(egui::Rounding::same(15.0));
+
+                                                if ui.add(remove_btn).clicked() {
+                                                    items_to_remove.push(index);
+                                                }
+                                            }
+                                        });
+                                    });
+                                });
+
+                                ui.add_space(5.0);
+                            }
+
+                            // Remove items outside the loop
+                            for index in items_to_remove.iter().rev() {
+                                self.remove_from_queue(*index);
+                            }
+                        });
+
+                    ui.add_space(15.0);
+
+                    // Action buttons
+                    ui.horizontal(|ui| {
+                        let process_btn = egui::Button::new(
+                            egui::RichText::new("⚙ Process Queue").size(16.0).color(egui::Color32::WHITE)
+                        )
+                        .fill(egui::Color32::from_rgb(91, 206, 250))
+                        .min_size(egui::vec2(180.0, 40.0))
+                        .rounding(egui::Rounding::same(20.0));
+
+                        if ui.add_enabled(!self.is_processing_queue && !self.queue.is_empty(), process_btn).clicked() {
+                            self.process_queue();
+                        }
+
+                        ui.add_space(10.0);
+
+                        let clear_btn = egui::Button::new(
+                            egui::RichText::new("Clear Queue").size(16.0).color(egui::Color32::WHITE)
+                        )
+                        .fill(egui::Color32::from_rgb(245, 169, 184))
+                        .min_size(egui::vec2(150.0, 40.0))
+                        .rounding(egui::Rounding::same(20.0));
+
+                        if ui.add_enabled(!self.is_processing_queue, clear_btn).clicked() {
+                            self.clear_queue();
+                        }
+
+                        ui.add_space(10.0);
+
+                        let close_btn = egui::Button::new(
+                            egui::RichText::new("Close").size(16.0).color(egui::Color32::WHITE)
+                        )
+                        .fill(egui::Color32::from_rgb(120, 120, 120))
+                        .min_size(egui::vec2(100.0, 40.0))
+                        .rounding(egui::Rounding::same(20.0));
+
+                        if ui.add(close_btn).clicked() {
+                            self.show_queue_panel = false;
+                        }
+                    });
+
+                    if self.is_processing_queue {
+                        ui.add_space(10.0);
+                        ui.label(egui::RichText::new("Processing queue...")
+                            .size(13.0)
+                            .color(egui::Color32::from_rgb(91, 206, 250)));
+                    }
+                });
+            });
     }
 
     fn render_settings_panel(&mut self, ctx: &egui::Context) {
@@ -434,6 +736,13 @@ impl eframe::App for CryptorApp {
                     }
                 });
 
+                ui.menu_button("Queue", |ui| {
+                    if ui.button(format!("📋 View Queue ({})", self.queue.len())).clicked() {
+                        self.show_queue_panel = true;
+                        ui.close_menu();
+                    }
+                });
+
                 ui.menu_button("Settings", |ui| {
                     if ui.button("⚙ Open Settings").clicked() {
                         self.show_settings = true;
@@ -448,6 +757,11 @@ impl eframe::App for CryptorApp {
                 });
             });
         });
+
+        // Queue panel window
+        if self.show_queue_panel {
+            self.render_queue_panel(ctx);
+        }
 
         // Settings panel window
         if self.show_settings {
@@ -598,40 +912,55 @@ impl eframe::App for CryptorApp {
 
                         ui.add_space(30.0);
 
-                        // Action button
+                        // Action buttons
                         ui.vertical_centered(|ui| {
-                            let button_text = if self.is_processing {
-                                "⏳ Processing..."
-                            } else {
-                                match &self.mode {
-                                    Some(Mode::Encrypt) => "🔐 Encrypt File",
-                                    Some(Mode::Decrypt) => "🔓 Decrypt File",
-                                    None => "Select Mode First",
+                            ui.horizontal(|ui| {
+                                ui.add_space(80.0);
+
+                                let button_text = if self.is_processing {
+                                    "⏳ Processing..."
+                                } else {
+                                    match &self.mode {
+                                        Some(Mode::Encrypt) => "🔐 Encrypt File",
+                                        Some(Mode::Decrypt) => "🔓 Decrypt File",
+                                        None => "Select Mode First",
+                                    }
+                                };
+
+                                let button_enabled = !self.is_processing
+                                    && !self.is_processing_queue
+                                    && self.mode.is_some()
+                                    && !self.input_path.is_empty()
+                                    && !self.output_path.is_empty()
+                                    && !self.password.is_empty();
+
+                                let button_color = egui::Color32::from_rgb(91, 206, 250);
+
+                                let action_btn = egui::Button::new(
+                                    egui::RichText::new(button_text).size(18.0).color(egui::Color32::WHITE)
+                                )
+                                .fill(button_color)
+                                .min_size(egui::vec2(280.0, 50.0))
+                                .rounding(egui::Rounding::same(25.0));
+
+                                if ui.add_enabled(button_enabled, action_btn).clicked() {
+                                    self.process_file();
                                 }
-                            };
 
-                            let button_enabled = !self.is_processing
-                                && self.mode.is_some()
-                                && !self.input_path.is_empty()
-                                && !self.output_path.is_empty()
-                                && !self.password.is_empty();
+                                ui.add_space(15.0);
 
-                            let button_color = if self.mode == Some(Mode::Encrypt) {
-                                egui::Color32::from_rgb(91, 206, 250)
-                            } else {
-                                egui::Color32::from_rgb(91, 206, 250)
-                            };
+                                // Add to Queue button
+                                let queue_btn = egui::Button::new(
+                                    egui::RichText::new("➕ Add to Queue").size(18.0).color(egui::Color32::WHITE)
+                                )
+                                .fill(egui::Color32::from_rgb(245, 169, 184))
+                                .min_size(egui::vec2(200.0, 50.0))
+                                .rounding(egui::Rounding::same(25.0));
 
-                            let action_btn = egui::Button::new(
-                                egui::RichText::new(button_text).size(18.0).color(egui::Color32::WHITE)
-                            )
-                            .fill(button_color)
-                            .min_size(egui::vec2(300.0, 50.0))
-                            .rounding(egui::Rounding::same(25.0));
-
-                            if ui.add_enabled(button_enabled, action_btn).clicked() {
-                                self.process_file();
-                            }
+                                if ui.add_enabled(button_enabled, queue_btn).clicked() {
+                                    self.add_to_queue();
+                                }
+                            });
                         });
 
                         ui.add_space(20.0);
