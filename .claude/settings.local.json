@@ -10,7 +10,10 @@
       "Bash(bd list:*)",
       "Bash(bd dep tree:*)",
       "Bash(bd update:*)",
-      "Bash(bd close sc-fhk:*)"
+      "Bash(bd close sc-fhk:*)",
+      "Bash(bd close:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)"
     ],
     "deny": [],
     "ask": []

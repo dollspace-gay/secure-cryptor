@@ -3,7 +3,7 @@
 Instructions for Claude
 For all work in this repository, you must use the beads issue tracker.
 Use the bd command-line tool to create, manage, and close issues.
-Do not use markdown files for creating to-do lists or for tracking your work. All issues and bugs are to be tracked via bd.
+Do not use markdown files for creating to-do lists or for tracking your work. All issues and bugs are to be tracked via bd. This software is used for encryption and decryption so you will always stringently follow best security and privacy practices in coding.
 
 bd - Dependency-Aware Issue Tracker
 

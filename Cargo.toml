@@ -2,16 +2,33 @@
 name = "secure-cryptor"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+description = "A secure file encryption/decryption library using AES-256-GCM with Argon2id"
+repository = "https://github.com/yourusername/secure-cryptor"
+keywords = ["encryption", "cryptography", "aes-gcm", "argon2", "security"]
+categories = ["cryptography"]
+
+[lib]
+name = "secure_cryptor"
+path = "src/lib.rs"
+
+[[bin]]
+name = "secure-cryptor"
+path = "src/main.rs"
 
 [dependencies]
 aes-gcm = "0.10.3"
 argon2 = "0.5.3"
-# CHANGED: Explicitly add rand_core for RngCore trait
 rand = { version = "0.8.5", features = ["getrandom"] }
 rand_core = "0.6.4"
-rpassword = "7.3"
-clap = { version = "4.4.18", features = ["derive"] }
-thiserror = "1.0.56"
-subtle = "2.5.0"
-zeroize = { version = "1.7", features = ["derive"] }
-tempfile = "3.10"
+rpassword = "7.4"
+clap = { version = "4.5", features = ["derive"] }
+thiserror = "1.0"
+subtle = "2.6"
+zeroize = { version = "1.8", features = ["derive"] }
+tempfile = "3.23"
+
+[dev-dependencies]
+proptest = "1.5"
+criterion = "0.5"
+quickcheck = "1.0"
