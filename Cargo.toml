@@ -30,6 +30,8 @@ path = "src/bin/register/mod.rs"
 
 [dependencies]
 aes-gcm = "0.10.3"
+xts-mode = "0.5"
+aes = "0.8"
 argon2 = "0.5.3"
 rand = { version = "0.8.5", features = ["getrandom"] }
 rand_core = "0.6.4"
