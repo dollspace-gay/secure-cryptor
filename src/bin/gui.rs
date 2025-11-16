@@ -80,6 +80,7 @@ struct Settings {
     last_input_directory: Option<String>,
     last_output_directory: Option<String>,
     panel_transparency: u8,
+    enable_notifications: bool,
 }
 
 impl Default for Settings {
@@ -89,6 +90,7 @@ impl Default for Settings {
             last_input_directory: None,
             last_output_directory: None,
             panel_transparency: 100,
+            enable_notifications: true,
         }
     }
 }
@@ -118,6 +120,50 @@ impl Settings {
             .join("SecureCryptor")
             .join("settings.json")
     }
+}
+
+// Notification helper functions (cross-platform)
+fn show_notification(title: &str, message: &str, _is_error: bool) {
+    use notify_rust::Notification;
+    let _ = Notification::new()
+        .summary(title)
+        .body(message)
+        .appname("Secure Cryptor")
+        .show();
+}
+
+fn notify_success(operation: &str, filename: &str, enabled: bool) {
+    if !enabled {
+        return;
+    }
+    show_notification(
+        "Secure Cryptor",
+        &format!("{} completed: {}", operation, filename),
+        false,
+    );
+}
+
+fn notify_error(operation: &str, error: &str, enabled: bool) {
+    if !enabled {
+        return;
+    }
+    show_notification(
+        "Secure Cryptor - Error",
+        &format!("{} failed: {}", operation, error),
+        true,
+    );
+}
+
+fn notify_queue_complete(total: usize, succeeded: usize, failed: usize, enabled: bool) {
+    if !enabled {
+        return;
+    }
+    let message = if failed == 0 {
+        format!("Queue processing complete! {} items processed successfully.", succeeded)
+    } else {
+        format!("Queue processing complete! {} succeeded, {} failed out of {} total.", succeeded, failed, total)
+    };
+    show_notification("Secure Cryptor - Queue Complete", &message, failed > 0);
 }
 
 #[derive(PartialEq, Clone)]
@@ -329,9 +375,14 @@ impl CryptorApp {
             tokio::runtime::Runtime::new().expect("Failed to create runtime")
         });
 
+        let mut succeeded = 0;
+        let mut failed = 0;
+        let total = self.queue.len();
+
         // Process each item in the queue
         for item in &mut self.queue {
             if matches!(item.status, QueueStatus::Completed) {
+                succeeded += 1;
                 continue;
             }
 
@@ -351,16 +402,21 @@ impl CryptorApp {
                 Ok(_) => {
                     item.status = QueueStatus::Completed;
                     item.progress = 1.0;
+                    succeeded += 1;
                 }
                 Err(e) => {
                     item.status = QueueStatus::Failed(e.to_string());
                     item.progress = 0.0;
+                    failed += 1;
                 }
             }
         }
 
         self.is_processing_queue = false;
         self.status_message = "Queue processing complete".to_string();
+
+        // Show completion notification
+        notify_queue_complete(total, succeeded, failed, self.settings.enable_notifications);
     }
 
     fn clear_queue(&mut self) {
@@ -570,6 +626,17 @@ impl CryptorApp {
 
                     ui.add_space(15.0);
 
+                    // Enable notifications checkbox
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Enable Notifications:").size(14.0));
+                        ui.add_space(10.0);
+                        if ui.checkbox(&mut self.settings.enable_notifications, "").changed() {
+                            let _ = self.settings.save();
+                        }
+                    });
+
+                    ui.add_space(15.0);
+
                     // Panel transparency slider
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("Panel Transparency:").size(14.0));
@@ -675,10 +742,20 @@ impl CryptorApp {
                     Ok(msg) => {
                         self.status_message = msg;
                         self.progress = 1.0;
+
+                        // Show success notification
+                        let filename = std::path::Path::new(&output_path)
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or(&output_path);
+                        notify_success("Encryption", filename, self.settings.enable_notifications);
                     }
                     Err(e) => {
                         self.status_message = format!("Encryption failed: {}", e);
                         self.progress = 0.0;
+
+                        // Show error notification
+                        notify_error("Encryption", &e.to_string(), self.settings.enable_notifications);
                     }
                 }
             }
@@ -691,10 +768,20 @@ impl CryptorApp {
                     Ok(msg) => {
                         self.status_message = msg;
                         self.progress = 1.0;
+
+                        // Show success notification
+                        let filename = std::path::Path::new(&output_path)
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or(&output_path);
+                        notify_success("Decryption", filename, self.settings.enable_notifications);
                     }
                     Err(e) => {
                         self.status_message = format!("Decryption failed: {}", e);
                         self.progress = 0.0;
+
+                        // Show error notification
+                        notify_error("Decryption", &e.to_string(), self.settings.enable_notifications);
                     }
                 }
             }
