@@ -3,6 +3,8 @@
 
 #![windows_subsystem = "windows"]
 
+mod tray;
+
 use eframe::egui;
 use secure_cryptor::{
     ChunkedDecryptor, ChunkedEncryptor, ChunkedReader, StreamConfig,
@@ -221,6 +223,8 @@ struct CryptorApp {
     queue: Vec<QueueItem>,
     is_processing_queue: bool,
     show_queue_panel: bool,
+    tray_manager: Option<tray::TrayManager>,
+    window_visible: bool,
 }
 
 impl Default for CryptorApp {
@@ -233,6 +237,19 @@ impl CryptorApp {
     /// Create a new CryptorApp with optional initial file and mode
     fn new(initial_file: Option<String>, initial_mode: Option<Mode>) -> Self {
         let settings = Settings::load();
+
+        // Initialize system tray
+        let tray_manager = match tray::TrayManager::new() {
+            Ok(tray) => {
+                eprintln!("System tray initialized successfully");
+                Some(tray)
+            }
+            Err(e) => {
+                eprintln!("Failed to initialize system tray: {}. Running without tray icon.", e);
+                None
+            }
+        };
+
         let mut app = Self {
             mode: None,
             input_path: String::new(),
@@ -249,6 +266,8 @@ impl CryptorApp {
             queue: Vec::new(),
             is_processing_queue: false,
             show_queue_panel: false,
+            tray_manager,
+            window_visible: true,
         };
 
         // If initial file is provided, set it up
@@ -793,6 +812,60 @@ impl CryptorApp {
 
 impl eframe::App for CryptorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Process system tray events
+        if let Some(ref tray) = self.tray_manager {
+            if let Some(event) = tray.process_events() {
+                match event {
+                    tray::TrayEvent::ToggleWindow => {
+                        self.window_visible = !self.window_visible;
+                        if self.window_visible {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                        } else {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                        }
+                    }
+                    tray::TrayEvent::QuickEncrypt => {
+                        self.window_visible = true;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                        self.mode = Some(Mode::Encrypt);
+                        self.select_input_file();
+                    }
+                    tray::TrayEvent::QuickDecrypt => {
+                        self.window_visible = true;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                        self.mode = Some(Mode::Decrypt);
+                        self.select_input_file();
+                    }
+                    tray::TrayEvent::ShowSettings => {
+                        self.window_visible = true;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                        self.show_settings = true;
+                    }
+                    tray::TrayEvent::Quit => {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                }
+            }
+        }
+
+        // Update tray status
+        if let Some(ref mut tray) = self.tray_manager {
+            if self.is_processing {
+                tray.set_status("Processing...");
+            } else if self.is_processing_queue {
+                tray.set_status(&format!("Processing queue ({} items)", self.queue.len()));
+            } else {
+                tray.set_status("Ready");
+            }
+        }
+
+        // Request repaint to keep checking for tray events
+        ctx.request_repaint();
+
         // Draw gradient background
         let painter = ctx.layer_painter(egui::LayerId::background());
         let rect = ctx.screen_rect();
@@ -818,6 +891,13 @@ impl eframe::App for CryptorApp {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
+                    if self.tray_manager.is_some() {
+                        if ui.button("Minimize to Tray").clicked() {
+                            self.window_visible = false;
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                            ui.close_menu();
+                        }
+                    }
                     if ui.button("Exit").clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
