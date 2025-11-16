@@ -20,6 +20,10 @@ path = "src/main.rs"
 name = "secure-cryptor-gui"
 path = "src/bin/gui.rs"
 
+[[bin]]
+name = "secure-cryptor-register"
+path = "src/bin/register.rs"
+
 [dependencies]
 aes-gcm = "0.10.3"
 argon2 = "0.5.3"
@@ -36,6 +40,12 @@ flate2 = "1.0"
 eframe = "0.29"
 rfd = "0.15"
 tokio = { version = "1", features = ["full"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
 
 [dev-dependencies]
 proptest = "1.5"

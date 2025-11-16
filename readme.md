@@ -67,3 +67,52 @@ Example:
 
 
 The program will prompt you to enter the password. If the password is correct and the file is intact, the original data will be written to the output file.
+
+## 🖥️ GUI Application
+
+Secure Cryptor includes a native Windows GUI application with a beautiful, user-friendly interface.
+
+### Building the GUI
+
+```bash
+cargo build --release --bin secure-cryptor-gui
+```
+
+The GUI executable will be located at `target/release/secure-cryptor-gui.exe`.
+
+### Features
+
+- **Trans pride color theme**: Beautiful gradient background (blue to pink)
+- **Auto-detection**: Automatically switches to decrypt mode for .enc files
+- **Drag and drop ready**: Pre-populates fields when launched from file associations
+- **Real-time progress**: Visual progress bar with percentage indicator
+- **No console window**: Clean, professional Windows application
+
+### Windows Integration (Optional)
+
+You can register file associations and context menu entries for seamless Windows integration.
+
+#### Installing File Associations
+
+**Note: Requires Administrator privileges**
+
+1. Open Command Prompt or PowerShell as Administrator
+2. Navigate to the project directory
+3. Run the registration utility:
+
+```bash
+.\target\release\secure-cryptor-register.exe install
+```
+
+This will register:
+- **File Association**: Double-click `.enc` files to open them in Secure Cryptor GUI
+- **Context Menu (All Files)**: Right-click any file → "Encrypt with Secure Cryptor"
+- **Context Menu (.enc Files)**: Right-click .enc files → "Decrypt with Secure Cryptor"
+
+#### Uninstalling File Associations
+
+```bash
+.\target\release\secure-cryptor-register.exe uninstall
+```
+
+This removes all registry entries created during installation.

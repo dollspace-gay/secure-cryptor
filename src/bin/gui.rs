@@ -9,11 +9,44 @@ use secure_cryptor::{
     crypto::{aes_gcm::AesGcmEncryptor, kdf::Argon2Kdf, KeyDerivation},
     validation::validate_password,
 };
+use std::env;
 use std::path::PathBuf;
 use tokio::runtime::Runtime;
 use zeroize::Zeroizing;
 
 fn main() -> eframe::Result<()> {
+    // Parse command-line arguments
+    let args: Vec<String> = env::args().collect();
+    let mut initial_file: Option<String> = None;
+    let mut initial_mode: Option<Mode> = None;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--encrypt" => {
+                initial_mode = Some(Mode::Encrypt);
+                if i + 1 < args.len() {
+                    initial_file = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--decrypt" => {
+                initial_mode = Some(Mode::Decrypt);
+                if i + 1 < args.len() {
+                    initial_file = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            arg => {
+                // If it's a file path without a flag, assume it's a file to open
+                if !arg.starts_with("--") {
+                    initial_file = Some(arg.to_string());
+                }
+            }
+        }
+        i += 1;
+    }
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1024.0, 768.0])
@@ -26,7 +59,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Secure Cryptor",
         options,
-        Box::new(|cc| {
+        Box::new(move |cc| {
             // Set custom theme with rounded corners
             let mut style = (*cc.egui_ctx.style()).clone();
             style.visuals.widgets.inactive.rounding = egui::Rounding::same(20.0);
@@ -34,18 +67,17 @@ fn main() -> eframe::Result<()> {
             style.visuals.widgets.active.rounding = egui::Rounding::same(20.0);
             cc.egui_ctx.set_style(style);
 
-            Ok(Box::new(CryptorApp::default()))
+            Ok(Box::new(CryptorApp::new(initial_file, initial_mode)))
         }),
     )
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 enum Mode {
     Encrypt,
     Decrypt,
 }
 
-#[derive(Default)]
 struct CryptorApp {
     mode: Option<Mode>,
     input_path: String,
@@ -59,7 +91,62 @@ struct CryptorApp {
     runtime: Option<Runtime>,
 }
 
+impl Default for CryptorApp {
+    fn default() -> Self {
+        Self::new(None, None)
+    }
+}
+
 impl CryptorApp {
+    /// Create a new CryptorApp with optional initial file and mode
+    fn new(initial_file: Option<String>, initial_mode: Option<Mode>) -> Self {
+        let mut app = Self {
+            mode: None,
+            input_path: String::new(),
+            output_path: String::new(),
+            password: String::new(),
+            confirm_password: String::new(),
+            use_compression: false,
+            status_message: String::new(),
+            is_processing: false,
+            progress: 0.0,
+            runtime: None,
+        };
+
+        // If initial file is provided, set it up
+        if let Some(file_path) = initial_file {
+            app.input_path = file_path.clone();
+
+            // Auto-detect mode if not explicitly provided
+            let detected_mode = if file_path.ends_with(".enc") || file_path.ends_with(".encrypted") {
+                Mode::Decrypt
+            } else {
+                Mode::Encrypt
+            };
+
+            // Use provided mode or detected mode
+            app.mode = Some(initial_mode.unwrap_or(detected_mode));
+
+            // Set output path based on mode
+            match &app.mode {
+                Some(Mode::Encrypt) => {
+                    app.output_path = format!("{}.enc", file_path);
+                    app.status_message = format!("Ready to encrypt: {}", file_path);
+                }
+                Some(Mode::Decrypt) => {
+                    app.output_path = file_path
+                        .trim_end_matches(".enc")
+                        .trim_end_matches(".encrypted")
+                        .to_string();
+                    app.status_message = format!("Ready to decrypt: {}", file_path);
+                }
+                None => {}
+            }
+        }
+
+        app
+    }
+
     fn select_input_file(&mut self) {
         if let Some(path) = rfd::FileDialog::new().pick_file() {
             self.input_path = path.display().to_string();
