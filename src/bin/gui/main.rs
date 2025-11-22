@@ -172,8 +172,15 @@ fn notify_queue_complete(total: usize, succeeded: usize, failed: usize, enabled:
 enum Mode {
     Encrypt,
     Decrypt,
-    #[allow(dead_code)]
     Volume,
+}
+
+#[derive(PartialEq, Clone)]
+enum VolumeTab {
+    Create,
+    Mount,
+    Info,
+    Password,
 }
 
 #[derive(Clone)]
@@ -230,14 +237,16 @@ struct CryptorApp {
     // Volume management fields
     #[cfg(feature = "encrypted-volumes")]
     volume_manager: Option<secure_cryptor::volume::VolumeManager>,
-    #[allow(dead_code)]
+    volume_tab: VolumeTab,
     volume_container_path: String,
-    #[allow(dead_code)]
     volume_mount_point: String,
-    #[allow(dead_code)]
     volume_size: String,
-    #[allow(dead_code)]
+    volume_password: String,
+    volume_password_confirm: String,
+    volume_read_only: bool,
+    volume_status: String,
     mounted_volumes: Vec<secure_cryptor::volume::MountedVolumeInfo>,
+    volume_info: Option<String>,
 }
 
 impl Default for CryptorApp {
@@ -284,10 +293,16 @@ impl CryptorApp {
             // Volume management fields
             #[cfg(feature = "encrypted-volumes")]
             volume_manager: Some(secure_cryptor::volume::VolumeManager::new()),
+            volume_tab: VolumeTab::Create,
             volume_container_path: String::new(),
             volume_mount_point: String::new(),
             volume_size: String::from("100M"),
+            volume_password: String::new(),
+            volume_password_confirm: String::new(),
+            volume_read_only: false,
+            volume_status: String::new(),
             mounted_volumes: Vec::new(),
+            volume_info: None,
         };
 
         // If initial file is provided, set it up
@@ -841,6 +856,526 @@ impl CryptorApp {
 
         self.is_processing = false;
     }
+
+    #[cfg(feature = "encrypted-volumes")]
+    fn render_volume_ui(&mut self, ui: &mut egui::Ui) {
+        use secure_cryptor::volume::Container;
+
+        // Tab buttons
+        ui.vertical_centered(|ui| {
+            ui.label(egui::RichText::new("Volume Operations").size(20.0));
+            ui.add_space(15.0);
+
+            ui.horizontal(|ui| {
+                ui.allocate_space(egui::vec2(100.0, 0.0));
+
+                let create_color = if self.volume_tab == VolumeTab::Create {
+                    egui::Color32::from_rgb(91, 206, 250)
+                } else {
+                    egui::Color32::from_rgb(200, 200, 200)
+                };
+
+                let mount_color = if self.volume_tab == VolumeTab::Mount {
+                    egui::Color32::from_rgb(91, 206, 250)
+                } else {
+                    egui::Color32::from_rgb(200, 200, 200)
+                };
+
+                let info_color = if self.volume_tab == VolumeTab::Info {
+                    egui::Color32::from_rgb(91, 206, 250)
+                } else {
+                    egui::Color32::from_rgb(200, 200, 200)
+                };
+
+                let password_color = if self.volume_tab == VolumeTab::Password {
+                    egui::Color32::from_rgb(91, 206, 250)
+                } else {
+                    egui::Color32::from_rgb(200, 200, 200)
+                };
+
+                if ui.add(egui::Button::new(egui::RichText::new("📦 Create").size(14.0).color(egui::Color32::WHITE))
+                    .fill(create_color)
+                    .min_size(egui::vec2(120.0, 40.0))
+                    .rounding(egui::Rounding::same(20.0))).clicked() {
+                    self.volume_tab = VolumeTab::Create;
+                }
+
+                ui.add_space(10.0);
+
+                if ui.add(egui::Button::new(egui::RichText::new("💾 Mount").size(14.0).color(egui::Color32::WHITE))
+                    .fill(mount_color)
+                    .min_size(egui::vec2(120.0, 40.0))
+                    .rounding(egui::Rounding::same(20.0))).clicked() {
+                    self.volume_tab = VolumeTab::Mount;
+                }
+
+                ui.add_space(10.0);
+
+                if ui.add(egui::Button::new(egui::RichText::new("ℹ️ Info").size(14.0).color(egui::Color32::WHITE))
+                    .fill(info_color)
+                    .min_size(egui::vec2(120.0, 40.0))
+                    .rounding(egui::Rounding::same(20.0))).clicked() {
+                    self.volume_tab = VolumeTab::Info;
+                }
+
+                ui.add_space(10.0);
+
+                if ui.add(egui::Button::new(egui::RichText::new("🔐 Password").size(14.0).color(egui::Color32::WHITE))
+                    .fill(password_color)
+                    .min_size(egui::vec2(120.0, 40.0))
+                    .rounding(egui::Rounding::same(20.0))).clicked() {
+                    self.volume_tab = VolumeTab::Password;
+                }
+            });
+        });
+
+        ui.add_space(30.0);
+
+        // Tab content
+        match self.volume_tab {
+            VolumeTab::Create => {
+                ui.vertical_centered(|ui| {
+                    ui.label(egui::RichText::new("Create New Encrypted Volume").size(18.0));
+                });
+                ui.add_space(20.0);
+
+                // Container path
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Container Path").size(14.0));
+                    ui.add_space(10.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_container_path)
+                        .desired_width(450.0));
+                    ui.add_space(10.0);
+                    if ui.button("Browse...").clicked() {
+                        if let Some(path) = rfd::FileDialog::new()
+                            .set_file_name("volume.crypt")
+                            .save_file()
+                        {
+                            self.volume_container_path = path.display().to_string();
+                        }
+                    }
+                });
+
+                ui.add_space(15.0);
+
+                // Volume size
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Volume Size").size(14.0));
+                    ui.add_space(38.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_size)
+                        .desired_width(450.0));
+                    ui.add_space(10.0);
+                    ui.label("(e.g., 100M, 1G, 500M)");
+                });
+
+                ui.add_space(15.0);
+
+                // Password
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Password").size(14.0));
+                    ui.add_space(58.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_password)
+                        .password(true)
+                        .desired_width(450.0));
+                });
+
+                ui.add_space(15.0);
+
+                // Confirm password
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Confirm Password").size(14.0));
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_password_confirm)
+                        .password(true)
+                        .desired_width(450.0));
+                });
+
+                ui.add_space(30.0);
+
+                // Create button
+                ui.vertical_centered(|ui| {
+                    let can_create = !self.volume_container_path.is_empty()
+                        && !self.volume_size.is_empty()
+                        && !self.volume_password.is_empty()
+                        && self.volume_password == self.volume_password_confirm;
+
+                    if ui.add_enabled(can_create, egui::Button::new(
+                        egui::RichText::new("📦 Create Volume").size(16.0).color(egui::Color32::WHITE))
+                        .fill(egui::Color32::from_rgb(91, 206, 250))
+                        .min_size(egui::vec2(250.0, 50.0))
+                        .rounding(egui::Rounding::same(25.0))).clicked() {
+
+                        // Parse size
+                        let size_result = parse_size(&self.volume_size);
+                        match size_result {
+                            Ok(size_bytes) => {
+                                match Container::create(
+                                    std::path::Path::new(&self.volume_container_path),
+                                    size_bytes,
+                                    &self.volume_password,
+                                    4096,
+                                ) {
+                                    Ok(_) => {
+                                        self.volume_status = format!("✓ Volume created successfully: {} bytes", size_bytes);
+                                        self.volume_password.clear();
+                                        self.volume_password_confirm.clear();
+                                    }
+                                    Err(e) => {
+                                        self.volume_status = format!("✗ Error: {}", e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                self.volume_status = format!("✗ Invalid size format: {}", e);
+                            }
+                        }
+                    }
+                });
+
+                // Status message
+                if !self.volume_status.is_empty() {
+                    ui.add_space(20.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label(egui::RichText::new(&self.volume_status).size(13.0));
+                    });
+                }
+            }
+
+            VolumeTab::Mount => {
+                ui.vertical_centered(|ui| {
+                    ui.label(egui::RichText::new("Mount/Unmount Encrypted Volume").size(18.0));
+                });
+                ui.add_space(20.0);
+
+                // Container path
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Container Path").size(14.0));
+                    ui.add_space(10.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_container_path)
+                        .desired_width(450.0));
+                    ui.add_space(10.0);
+                    if ui.button("Browse...").clicked() {
+                        if let Some(path) = rfd::FileDialog::new().pick_file() {
+                            self.volume_container_path = path.display().to_string();
+                        }
+                    }
+                });
+
+                ui.add_space(15.0);
+
+                // Mount point
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Mount Point").size(14.0));
+                    ui.add_space(25.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_mount_point)
+                        .desired_width(450.0));
+                    ui.add_space(10.0);
+                    if ui.button("Browse...").clicked() {
+                        if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                            self.volume_mount_point = path.display().to_string();
+                        }
+                    }
+                });
+
+                ui.add_space(15.0);
+
+                // Password
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Password").size(14.0));
+                    ui.add_space(58.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_password)
+                        .password(true)
+                        .desired_width(450.0));
+                });
+
+                ui.add_space(15.0);
+
+                // Read-only checkbox
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.volume_read_only, "Mount as read-only");
+                });
+
+                ui.add_space(30.0);
+
+                // Mount/Unmount buttons
+                ui.vertical_centered(|ui| {
+                    ui.horizontal(|ui| {
+                        let can_mount = !self.volume_container_path.is_empty()
+                            && !self.volume_mount_point.is_empty()
+                            && !self.volume_password.is_empty();
+
+                        if ui.add_enabled(can_mount, egui::Button::new(
+                            egui::RichText::new("💾 Mount Volume").size(16.0).color(egui::Color32::WHITE))
+                            .fill(egui::Color32::from_rgb(91, 206, 250))
+                            .min_size(egui::vec2(200.0, 50.0))
+                            .rounding(egui::Rounding::same(25.0))).clicked() {
+
+                            #[cfg(feature = "encrypted-volumes")]
+                            {
+                                use secure_cryptor::volume::MountOptions;
+
+                                if let Some(ref mut manager) = self.volume_manager {
+                                    let options = MountOptions {
+                                        mount_point: std::path::PathBuf::from(&self.volume_mount_point),
+                                        read_only: self.volume_read_only,
+                                        allow_other: false,
+                                        auto_unmount: true,
+                                        fs_name: Some("SecureCryptor".to_string()),
+                                    };
+
+                                    match manager.mount(
+                                        std::path::Path::new(&self.volume_container_path),
+                                        &self.volume_password,
+                                        options,
+                                    ) {
+                                        Ok(_) => {
+                                            self.volume_status = format!("✓ Volume mounted at {}", self.volume_mount_point);
+                                            self.volume_password.clear();
+                                            // Update mounted volumes list
+                                            self.mounted_volumes = manager.list_mounted();
+                                        }
+                                        Err(e) => {
+                                            self.volume_status = format!("✗ Mount error: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        ui.add_space(20.0);
+
+                        if ui.add_enabled(!self.volume_container_path.is_empty(), egui::Button::new(
+                            egui::RichText::new("⏏️ Unmount").size(16.0).color(egui::Color32::WHITE))
+                            .fill(egui::Color32::from_rgb(245, 169, 184))
+                            .min_size(egui::vec2(200.0, 50.0))
+                            .rounding(egui::Rounding::same(25.0))).clicked() {
+
+                            #[cfg(feature = "encrypted-volumes")]
+                            {
+                                if let Some(ref mut manager) = self.volume_manager {
+                                    match manager.unmount(std::path::Path::new(&self.volume_container_path)) {
+                                        Ok(_) => {
+                                            self.volume_status = "✓ Volume unmounted successfully".to_string();
+                                            // Update mounted volumes list
+                                            self.mounted_volumes = manager.list_mounted();
+                                        }
+                                        Err(e) => {
+                                            self.volume_status = format!("✗ Unmount error: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                });
+
+                // Status message
+                if !self.volume_status.is_empty() {
+                    ui.add_space(20.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label(egui::RichText::new(&self.volume_status).size(13.0));
+                    });
+                }
+
+                // Mounted volumes list
+                if !self.mounted_volumes.is_empty() {
+                    ui.add_space(30.0);
+                    ui.separator();
+                    ui.add_space(10.0);
+                    ui.label(egui::RichText::new("Currently Mounted Volumes").size(16.0));
+                    ui.add_space(10.0);
+
+                    for vol_info in &self.mounted_volumes {
+                        ui.horizontal(|ui| {
+                            ui.label(format!("📦 {} → {}",
+                                vol_info.container_path.display(),
+                                vol_info.mount_point.display()));
+                        });
+                    }
+                }
+            }
+
+            VolumeTab::Info => {
+                ui.vertical_centered(|ui| {
+                    ui.label(egui::RichText::new("Volume Information").size(18.0));
+                });
+                ui.add_space(20.0);
+
+                // Container path
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Container Path").size(14.0));
+                    ui.add_space(10.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_container_path)
+                        .desired_width(450.0));
+                    ui.add_space(10.0);
+                    if ui.button("Browse...").clicked() {
+                        if let Some(path) = rfd::FileDialog::new().pick_file() {
+                            self.volume_container_path = path.display().to_string();
+                        }
+                    }
+                });
+
+                ui.add_space(15.0);
+
+                // Password
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Password").size(14.0));
+                    ui.add_space(58.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_password)
+                        .password(true)
+                        .desired_width(450.0));
+                });
+
+                ui.add_space(30.0);
+
+                // Get Info button
+                ui.vertical_centered(|ui| {
+                    let can_get_info = !self.volume_container_path.is_empty()
+                        && !self.volume_password.is_empty();
+
+                    if ui.add_enabled(can_get_info, egui::Button::new(
+                        egui::RichText::new("ℹ️ Get Volume Info").size(16.0).color(egui::Color32::WHITE))
+                        .fill(egui::Color32::from_rgb(91, 206, 250))
+                        .min_size(egui::vec2(250.0, 50.0))
+                        .rounding(egui::Rounding::same(25.0))).clicked() {
+
+                        match Container::open(
+                            std::path::Path::new(&self.volume_container_path),
+                            &self.volume_password,
+                        ) {
+                            Ok(container) => {
+                                self.volume_info = Some(format!(
+                                    "Container: {}\n\nData Size: {} bytes ({} MB)\nTotal Size: {} bytes ({} MB)\nSector Size: {} bytes\nActive Key Slots: {}\nUnlocked: {}",
+                                    self.volume_container_path,
+                                    container.data_size(),
+                                    container.data_size() / 1024 / 1024,
+                                    container.total_size(),
+                                    container.total_size() / 1024 / 1024,
+                                    container.sector_size(),
+                                    container.key_slots().active_count(),
+                                    if container.is_unlocked() { "Yes" } else { "No" }
+                                ));
+                                self.volume_status = "✓ Volume information retrieved".to_string();
+                                self.volume_password.clear();
+                            }
+                            Err(e) => {
+                                self.volume_info = None;
+                                self.volume_status = format!("✗ Error: {}", e);
+                            }
+                        }
+                    }
+                });
+
+                // Display info
+                if let Some(ref info) = self.volume_info {
+                    ui.add_space(20.0);
+                    ui.separator();
+                    ui.add_space(15.0);
+
+                    egui::ScrollArea::vertical()
+                        .max_height(200.0)
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new(info).size(12.0).family(egui::FontFamily::Monospace));
+                        });
+                }
+
+                // Status message
+                if !self.volume_status.is_empty() {
+                    ui.add_space(20.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label(egui::RichText::new(&self.volume_status).size(13.0));
+                    });
+                }
+            }
+
+            VolumeTab::Password => {
+                ui.vertical_centered(|ui| {
+                    ui.label(egui::RichText::new("Password Management").size(18.0));
+                });
+                ui.add_space(20.0);
+
+                // Container path
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Container Path").size(14.0));
+                    ui.add_space(10.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_container_path)
+                        .desired_width(450.0));
+                    ui.add_space(10.0);
+                    if ui.button("Browse...").clicked() {
+                        if let Some(path) = rfd::FileDialog::new().pick_file() {
+                            self.volume_container_path = path.display().to_string();
+                        }
+                    }
+                });
+
+                ui.add_space(15.0);
+
+                // Current password
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Current Password").size(14.0));
+                    ui.add_space(10.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_password)
+                        .password(true)
+                        .desired_width(450.0));
+                });
+
+                ui.add_space(15.0);
+
+                // New password
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("New Password").size(14.0));
+                    ui.add_space(34.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_password_confirm)
+                        .password(true)
+                        .desired_width(450.0));
+                });
+
+                ui.add_space(30.0);
+
+                // Change password button
+                ui.vertical_centered(|ui| {
+                    let can_change = !self.volume_container_path.is_empty()
+                        && !self.volume_password.is_empty()
+                        && !self.volume_password_confirm.is_empty();
+
+                    if ui.add_enabled(can_change, egui::Button::new(
+                        egui::RichText::new("🔐 Change Password").size(16.0).color(egui::Color32::WHITE))
+                        .fill(egui::Color32::from_rgb(91, 206, 250))
+                        .min_size(egui::vec2(250.0, 50.0))
+                        .rounding(egui::Rounding::same(25.0))).clicked() {
+
+                        match Container::open(
+                            std::path::Path::new(&self.volume_container_path),
+                            &self.volume_password,
+                        ) {
+                            Ok(mut container) => {
+                                match container.add_password(&self.volume_password_confirm) {
+                                    Ok(slot) => {
+                                        self.volume_status = format!("✓ Password added in slot {}", slot);
+                                        self.volume_password.clear();
+                                        self.volume_password_confirm.clear();
+                                    }
+                                    Err(e) => {
+                                        self.volume_status = format!("✗ Error: {}", e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                self.volume_status = format!("✗ Error opening container: {}", e);
+                            }
+                        }
+                    }
+                });
+
+                // Status message
+                if !self.volume_status.is_empty() {
+                    ui.add_space(20.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label(egui::RichText::new(&self.volume_status).size(13.0));
+                    });
+                }
+            }
+        }
+    }
 }
 
 impl eframe::App for CryptorApp {
@@ -1063,10 +1598,38 @@ impl eframe::App for CryptorApp {
                                         };
                                     }
                                 }
+
+                                ui.add_space(10.0);
+
+                                // Volume button
+                                #[cfg(feature = "encrypted-volumes")]
+                                {
+                                    let volume_color = if self.mode == Some(Mode::Volume) {
+                                        egui::Color32::from_rgb(144, 238, 144)
+                                    } else {
+                                        egui::Color32::from_rgb(200, 200, 200)
+                                    };
+
+                                    let volume_btn = egui::Button::new(
+                                        egui::RichText::new("💾 Volume").size(16.0).color(egui::Color32::WHITE)
+                                    )
+                                    .fill(volume_color)
+                                    .min_size(egui::vec2(140.0, 45.0))
+                                    .rounding(egui::Rounding::same(25.0));
+
+                                    if ui.add_enabled(!self.is_processing, volume_btn).clicked() {
+                                        self.mode = Some(Mode::Volume);
+                                    }
+                                }
                             });
                         });
 
                         ui.add_space(30.0);
+
+                        // Mode-specific UI content
+                        match &self.mode {
+                            Some(Mode::Encrypt) | Some(Mode::Decrypt) | None => {
+                                // File encryption/decryption UI
 
                         // Input file row
                         ui.horizontal(|ui| {
@@ -1230,6 +1793,21 @@ impl eframe::App for CryptorApp {
                                     .color(egui::Color32::from_rgb(80, 80, 80)));
                             });
                         }
+                            }
+                            #[cfg(feature = "encrypted-volumes")]
+                            Some(Mode::Volume) => {
+                                // Volume management UI
+                                self.render_volume_ui(ui);
+                            }
+                            #[cfg(not(feature = "encrypted-volumes"))]
+                            Some(Mode::Volume) => {
+                                ui.vertical_centered(|ui| {
+                                    ui.label(egui::RichText::new("Volume feature not enabled")
+                                        .size(14.0)
+                                        .color(egui::Color32::from_rgb(200, 100, 100)));
+                                });
+                            }
+                        }
 
                         ui.add_space(20.0);
 
@@ -1348,4 +1926,30 @@ fn decrypt_file(
     decryptor.decrypt_to(&mut output_file)?;
 
     Ok(format!("File decrypted successfully: {}", output.display()))
+}
+
+/// Parse size string (e.g., "100M", "1G") into bytes
+fn parse_size(size_str: &str) -> Result<u64, Box<dyn std::error::Error>> {
+    let size_str = size_str.trim().to_uppercase();
+
+    if size_str.is_empty() {
+        return Err("Size string is empty".into());
+    }
+
+    if size_str.ends_with('K') {
+        let num = size_str[..size_str.len()-1].parse::<u64>()?;
+        Ok(num * 1024)
+    } else if size_str.ends_with('M') {
+        let num = size_str[..size_str.len()-1].parse::<u64>()?;
+        Ok(num * 1024 * 1024)
+    } else if size_str.ends_with('G') {
+        let num = size_str[..size_str.len()-1].parse::<u64>()?;
+        Ok(num * 1024 * 1024 * 1024)
+    } else if size_str.ends_with('T') {
+        let num = size_str[..size_str.len()-1].parse::<u64>()?;
+        Ok(num * 1024 * 1024 * 1024 * 1024)
+    } else {
+        // No suffix, parse as raw bytes
+        Ok(size_str.parse::<u64>()?)
+    }
 }

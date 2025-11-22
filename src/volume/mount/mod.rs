@@ -106,12 +106,12 @@ pub fn mount(
 ) -> Result<MountHandle> {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
-        fuse::mount(container_path, password, options)
+        fuse::mount(container_path, password, options).map(|inner| MountHandle { inner })
     }
 
     #[cfg(target_os = "windows")]
     {
-        winfsp::mount(container_path, password, options)
+        winfsp::mount(container_path, password, options).map(|inner| MountHandle { inner })
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
