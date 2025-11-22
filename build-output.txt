@@ -1,0 +1,659 @@
+warning: Patch `blake2 v0.10.6 (F:\cryptor\secure-cryptor\rustcrypto-hashes-fork\blake2)` was not used in the crate graph.
+Check that the patched package version and available features are compatible
+with the dependency requirements. If the patch has a different version from
+what is locked in the Cargo.lock file, run `cargo update` to use the new
+version. This may also occur with an optional dependency that is not enabled.
+   Compiling glob v0.3.3
+   Compiling libc v0.2.177
+   Compiling prettyplease v0.2.37
+   Compiling regex-syntax v0.8.8
+   Compiling memchr v2.7.6
+   Compiling minimal-lexical v0.2.1
+   Compiling windows-link v0.2.1
+   Compiling bindgen v0.72.1
+   Compiling libloading v0.8.9
+   Compiling either v1.15.0
+   Compiling bitflags v2.10.0
+   Compiling rustc-hash v2.1.1
+   Compiling clang-sys v1.8.1
+   Compiling nom v7.1.3
+   Compiling itertools v0.10.5
+    Checking windows v0.61.3
+   Compiling secure-cryptor v0.1.0 (F:\cryptor\secure-cryptor)
+    Checking widestring v1.2.1
+   Compiling regex-automata v0.4.13
+   Compiling cexpr v0.6.0
+   Compiling regex v1.12.2
+    Checking tauri-winrt-notification v0.7.2
+    Checking notify-rust v4.11.7
+   Compiling winfsp-sys v0.12.1+winfsp-2.1
+    Checking winfsp v0.12.4+winfsp-2.1
+error[E0432]: unresolved imports `winfsp::U16Str`, `winfsp::FileSystem`
+  --> src\volume\mount\winfsp.rs:16:35
+   |
+16 | use winfsp::{U16CStr, U16CString, U16Str, FileSystem, error::FspError};
+   |                                   ^^^^^^  ^^^^^^^^^^ no `FileSystem` in the root
+   |                                   |
+   |                                   no `U16Str` in the root
+   |
+help: a similar name exists in the module
+   |
+16 | use winfsp::{U16CStr, U16CString, U16CStr, FileSystem, error::FspError};
+   |                                      +
+help: a similar name exists in the module (notice the capitalization)
+   |
+16 - use winfsp::{U16CStr, U16CString, U16Str, FileSystem, error::FspError};
+16 + use winfsp::{U16CStr, U16CString, U16Str, filesystem, error::FspError};
+   |
+
+error[E0407]: method `delete` is not a member of trait `FileSystemContext`
+   --> src\volume\mount\winfsp.rs:394:5
+    |
+394 | /     fn delete(
+395 | |         &self,
+396 | |         file_name: &U16CStr,
+397 | |         _file_context: usize,
+...   |
+416 | |         Ok(())
+417 | |     }
+    | |_____^ not a member of trait `FileSystemContext`
+
+error[E0425]: cannot find value `FILE_ATTRIBUTE_DIRECTORY` in this scope
+  --> src\volume\mount\winfsp.rs:65:36
+   |
+65 |             FileType::Directory => FILE_ATTRIBUTE_DIRECTORY,
+   |                                    ^^^^^^^^^^^^^^^^^^^^^^^^ not found in this scope
+   |
+help: consider importing this constant
+   |
+ 1 + use winapi::um::winnt::FILE_ATTRIBUTE_DIRECTORY;
+   |
+
+error[E0425]: cannot find value `FILE_ATTRIBUTE_NORMAL` in this scope
+  --> src\volume\mount\winfsp.rs:66:38
+   |
+66 |             FileType::RegularFile => FILE_ATTRIBUTE_NORMAL,
+   |                                      ^^^^^^^^^^^^^^^^^^^^^ not found in this scope
+   |
+help: consider importing this constant
+   |
+ 1 + use winapi::um::winnt::FILE_ATTRIBUTE_NORMAL;
+   |
+
+error[E0425]: cannot find value `FILE_ATTRIBUTE_REPARSE_POINT` in this scope
+  --> src\volume\mount\winfsp.rs:67:34
+   |
+67 |             FileType::Symlink => FILE_ATTRIBUTE_REPARSE_POINT,
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ not found in this scope
+   |
+help: consider importing this constant
+   |
+ 1 + use winapi::um::winnt::FILE_ATTRIBUTE_REPARSE_POINT;
+   |
+
+error[E0425]: cannot find value `FILE_ATTRIBUTE_DIRECTORY` in this scope
+   --> src\volume\mount\winfsp.rs:173:46
+    |
+173 |         let is_directory = file_attributes & FILE_ATTRIBUTE_DIRECTORY != 0;
+    |                                              ^^^^^^^^^^^^^^^^^^^^^^^^ not found in this scope
+    |
+help: consider importing this constant
+    |
+  1 + use winapi::um::winnt::FILE_ATTRIBUTE_DIRECTORY;
+    |
+
+error[E0425]: cannot find value `INVALID_FILE_ATTRIBUTES` in this scope
+   --> src\volume\mount\winfsp.rs:329:55
+    |
+329 |         if file_attributes != 0 && file_attributes != INVALID_FILE_ATTRIBUTES {
+    |                                                       ^^^^^^^^^^^^^^^^^^^^^^^ not found in this scope
+    |
+help: consider importing this constant
+    |
+  1 + use winapi::um::fileapi::INVALID_FILE_ATTRIBUTES;
+    |
+
+error[E0425]: cannot find value `FILE_ATTRIBUTE_READONLY` in this scope
+   --> src\volume\mount\winfsp.rs:331:45
+    |
+331 |             let mode = if file_attributes & FILE_ATTRIBUTE_READONLY != 0 {
+    |                                             ^^^^^^^^^^^^^^^^^^^^^^^ not found in this scope
+    |
+help: consider importing this constant
+    |
+  1 + use winapi::um::winnt::FILE_ATTRIBUTE_READONLY;
+    |
+
+error[E0425]: cannot find value `FILE_ATTRIBUTE_DIRECTORY` in this scope
+   --> src\volume\mount\winfsp.rs:438:36
+    |
+438 |         dir_info.file_attributes = FILE_ATTRIBUTE_DIRECTORY;
+    |                                    ^^^^^^^^^^^^^^^^^^^^^^^^ not found in this scope
+    |
+help: consider importing this constant
+    |
+  1 + use winapi::um::winnt::FILE_ATTRIBUTE_DIRECTORY;
+    |
+
+error[E0425]: cannot find value `FILE_ATTRIBUTE_DIRECTORY` in this scope
+   --> src\volume\mount\winfsp.rs:444:36
+    |
+444 |         dir_info.file_attributes = FILE_ATTRIBUTE_DIRECTORY;
+    |                                    ^^^^^^^^^^^^^^^^^^^^^^^^ not found in this scope
+    |
+help: consider importing this constant
+    |
+  1 + use winapi::um::winnt::FILE_ATTRIBUTE_DIRECTORY;
+    |
+
+error[E0433]: failed to resolve: could not find `VolumeParams` in `winfsp`
+   --> src\volume\mount\winfsp.rs:540:37
+    |
+540 |     let mut volume_params = winfsp::VolumeParams::new(
+    |                                     ^^^^^^^^^^^^ could not find `VolumeParams` in `winfsp`
+    |
+help: consider importing this struct
+    |
+  1 + use winfsp::host::VolumeParams;
+    |
+help: if you import `VolumeParams`, refer to it directly
+    |
+540 -     let mut volume_params = winfsp::VolumeParams::new(
+540 +     let mut volume_params = VolumeParams::new(
+    |
+
+error[E0603]: module `error` is private
+  --> src\volume\mount\winfsp.rs:16:55
+   |
+16 | use winfsp::{U16CStr, U16CString, U16Str, FileSystem, error::FspError};
+   |                                                       ^^^^^ private module
+   |
+help: consider importing this enum instead:
+      winfsp::FspError
+  --> src\volume\mount\winfsp.rs:16:55
+   |
+16 | use winfsp::{U16CStr, U16CString, U16Str, FileSystem, error::FspError};
+   |                                                       ^^^^^^^^^^^^^^^
+note: the module `error` is defined here
+  --> C:\Users\admin\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\winfsp-0.12.4+winfsp-2.1\src\lib.rs:32:1
+   |
+32 | mod error;
+   | ^^^^^^^^^
+
+warning: unused import: `OsStr`
+ --> src\volume\mount\winfsp.rs:6:16
+  |
+6 | use std::ffi::{OsStr, OsString};
+  |                ^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `OsStrExt`
+ --> src\volume\mount\winfsp.rs:7:29
+  |
+7 | use std::os::windows::ffi::{OsStrExt, OsStringExt};
+  |                             ^^^^^^^^
+
+warning: unused import: `winfsp::constants::*`
+  --> src\volume\mount\winfsp.rs:12:5
+   |
+12 | use winfsp::constants::*;
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+error[E0107]: type alias takes 1 generic argument but 2 generic arguments were supplied
+   --> src\volume\mount\winfsp.rs:425:10
+    |
+425 |     ) -> Result<(), FspError> {
+    |          ^^^^^^   ---------- help: remove the unnecessary generic argument
+    |          |
+    |          expected 1 generic argument
+    |
+note: type alias defined here, with 1 generic parameter: `T`
+   --> src\volume\mount\mod.rs:49:10
+    |
+ 49 | pub type Result<T> = std::result::Result<T, MountError>;
+    |          ^^^^^^ -
+
+error[E0107]: type alias takes 1 generic argument but 2 generic arguments were supplied
+   --> src\volume\mount\winfsp.rs:132:64
+    |
+132 |     fn get_volume_info(&self, volume_info: &mut VolumeInfo) -> Result<(), FspError> {
+    |                                                                ^^^^^^   ---------- help: remove the unnecessary generic argument
+    |                                                                |
+    |                                                                expected 1 generic argument
+    |
+note: type alias defined here, with 1 generic parameter: `T`
+   --> src\volume\mount\mod.rs:49:10
+    |
+ 49 | pub type Result<T> = std::result::Result<T, MountError>;
+    |          ^^^^^^ -
+
+error[E0053]: method `get_volume_info` has an incompatible type for trait
+   --> src\volume\mount\winfsp.rs:132:64
+    |
+132 |     fn get_volume_info(&self, volume_info: &mut VolumeInfo) -> Result<(), FspError> {
+    |                                                                ^^^^^^^^^^^^^^^^^^^^ expected `FspError`, found `MountError`
+    |
+    = note: expected signature `fn(&WinFspAdapter, &mut VolumeInfo) -> std::result::Result<_, FspError>`
+               found signature `fn(&WinFspAdapter, &mut VolumeInfo) -> std::result::Result<_, MountError>`
+help: change the output type to match the trait
+    |
+132 |     fn get_volume_info(&self, volume_info: &mut VolumeInfo) -> std::result::Result<(), FspError> {
+    |                                                                +++++++++++++
+
+error[E0049]: method `get_security_by_name` has 0 type parameters but its trait declaration has 1 type parameter
+   --> src\volume\mount\winfsp.rs:144:28
+    |
+144 |       fn get_security_by_name(
+    |                              ^ found 0 type parameters
+    |
+   ::: C:\Users\admin\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\winfsp-0.12.4+winfsp-2.1\src\filesystem\context.rs:71:5
+    |
+ 71 | /     fn get_security_by_name(
+ 72 | |         &self,
+ 73 | |         file_name: &U16CStr,
+ 74 | |         security_descriptor: Option<&mut [c_void]>,
+ 75 | |         reparse_point_resolver: impl FnOnce(&U16CStr) -> Option<FileSecurity>,
+ 76 | |     ) -> Result<FileSecurity>;
+    | |______________________________- expected 1 type parameter
+
+error[E0107]: type alias takes 1 generic argument but 2 generic arguments were supplied
+   --> src\volume\mount\winfsp.rs:166:10
+    |
+166 |     ) -> Result<(), FspError> {
+    |          ^^^^^^   ---------- help: remove the unnecessary generic argument
+    |          |
+    |          expected 1 generic argument
+    |
+note: type alias defined here, with 1 generic parameter: `T`
+   --> src\volume\mount\mod.rs:49:10
+    |
+ 49 | pub type Result<T> = std::result::Result<T, MountError>;
+    |          ^^^^^^ -
+
+error[E0107]: type alias takes 1 generic argument but 2 generic arguments were supplied
+   --> src\volume\mount\winfsp.rs:196:10
+    |
+196 |     ) -> Result<(), FspError> {
+    |          ^^^^^^   ---------- help: remove the unnecessary generic argument
+    |          |
+    |          expected 1 generic argument
+    |
+note: type alias defined here, with 1 generic parameter: `T`
+   --> src\volume\mount\mod.rs:49:10
+    |
+ 49 | pub type Result<T> = std::result::Result<T, MountError>;
+    |          ^^^^^^ -
+
+error[E0107]: type alias takes 1 generic argument but 2 generic arguments were supplied
+   --> src\volume\mount\winfsp.rs:222:10
+    |
+222 |     ) -> Result<usize, FspError> {
+    |          ^^^^^^      ---------- help: remove the unnecessary generic argument
+    |          |
+    |          expected 1 generic argument
+    |
+note: type alias defined here, with 1 generic parameter: `T`
+   --> src\volume\mount\mod.rs:49:10
+    |
+ 49 | pub type Result<T> = std::result::Result<T, MountError>;
+    |          ^^^^^^ -
+
+error[E0050]: method `read` has 5 parameters but the declaration in trait `winfsp::filesystem::FileSystemContext::read` has 4
+   --> src\volume\mount\winfsp.rs:217:9
+    |
+217 | /         &self,
+218 | |         file_name: &U16CStr,
+219 | |         buffer: &mut [u8],
+220 | |         offset: u64,
+221 | |         _file_context: usize,
+    | |____________________________^ expected 4 parameters, found 5
+    |
+    = note: `read` from trait: `fn(&Self, &<Self as FileSystemContext>::FileContext, &mut [u8], u64) -> std::result::Result<u32, FspError>`
+
+error[E0107]: type alias takes 1 generic argument but 2 generic arguments were supplied
+   --> src\volume\mount\winfsp.rs:247:10
+    |
+247 |     ) -> Result<usize, FspError> {
+    |          ^^^^^^      ---------- help: remove the unnecessary generic argument
+    |          |
+    |          expected 1 generic argument
+    |
+note: type alias defined here, with 1 generic parameter: `T`
+   --> src\volume\mount\mod.rs:49:10
+    |
+ 49 | pub type Result<T> = std::result::Result<T, MountError>;
+    |          ^^^^^^ -
+
+error[E0050]: method `write` has 8 parameters but the declaration in trait `winfsp::filesystem::FileSystemContext::write` has 7
+   --> src\volume\mount\winfsp.rs:239:9
+    |
+239 | /         &self,
+240 | |         file_name: &U16CStr,
+241 | |         buffer: &[u8],
+242 | |         offset: u64,
+...   |
+245 | |         _file_context: usize,
+246 | |         file_info: &mut FileInfo,
+    | |________________________________^ expected 7 parameters, found 8
+    |
+    = note: `write` from trait: `fn(&Self, &<Self as FileSystemContext>::FileContext, &[u8], u64, bool, bool, &mut FileInfo) -> std::result::Result<u32, FspError>`
+
+error[E0107]: type alias takes 1 generic argument but 2 generic arguments were supplied
+   --> src\volume\mount\winfsp.rs:270:10
+    |
+270 |     ) -> Result<(), FspError> {
+    |          ^^^^^^   ---------- help: remove the unnecessary generic argument
+    |          |
+    |          expected 1 generic argument
+    |
+note: type alias defined here, with 1 generic parameter: `T`
+   --> src\volume\mount\mod.rs:49:10
+    |
+ 49 | pub type Result<T> = std::result::Result<T, MountError>;
+    |          ^^^^^^ -
+
+error[E0050]: method `flush` has 4 parameters but the declaration in trait `winfsp::filesystem::FileSystemContext::flush` has 3
+   --> src\volume\mount\winfsp.rs:266:9
+    |
+266 | /         &self,
+267 | |         _file_name: &U16CStr,
+268 | |         _file_context: usize,
+269 | |         _file_info: &mut FileInfo,
+    | |_________________________________^ expected 3 parameters, found 4
+    |
+    = note: `flush` from trait: `fn(&Self, std::option::Option<&<Self as FileSystemContext>::FileContext>, &mut FileInfo) -> std::result::Result<(), FspError>`
+
+error[E0107]: type alias takes 1 generic argument but 2 generic arguments were supplied
+   --> src\volume\mount\winfsp.rs:280:10
+    |
+280 |     ) -> Result<(), FspError> {
+    |          ^^^^^^   ---------- help: remove the unnecessary generic argument
+    |          |
+    |          expected 1 generic argument
+    |
+note: type alias defined here, with 1 generic parameter: `T`
+   --> src\volume\mount\mod.rs:49:10
+    |
+ 49 | pub type Result<T> = std::result::Result<T, MountError>;
+    |          ^^^^^^ -
+
+error[E0050]: method `get_file_info` has 4 parameters but the declaration in trait `get_file_info` has 3
+   --> src\volume\mount\winfsp.rs:276:9
+    |
+276 | /         &self,
+277 | |         file_name: &U16CStr,
+278 | |         _file_context: usize,
+279 | |         file_info: &mut FileInfo,
+    | |________________________________^ expected 3 parameters, found 4
+    |
+    = note: `get_file_info` from trait: `fn(&Self, &<Self as FileSystemContext>::FileContext, &mut FileInfo) -> std::result::Result<(), FspError>`
+
+error[E0107]: type alias takes 1 generic argument but 2 generic arguments were supplied
+   --> src\volume\mount\winfsp.rs:304:10
+    |
+304 |     ) -> Result<(), FspError> {
+    |          ^^^^^^   ---------- help: remove the unnecessary generic argument
+    |          |
+    |          expected 1 generic argument
+    |
+note: type alias defined here, with 1 generic parameter: `T`
+   --> src\volume\mount\mod.rs:49:10
+    |
+ 49 | pub type Result<T> = std::result::Result<T, MountError>;
+    |          ^^^^^^ -
+
+error[E0050]: method `set_basic_info` has 9 parameters but the declaration in trait `set_basic_info` has 8
+   --> src\volume\mount\winfsp.rs:295:9
+    |
+295 | /         &self,
+296 | |         file_name: &U16CStr,
+297 | |         file_attributes: u32,
+298 | |         creation_time: u64,
+...   |
+302 | |         _file_context: usize,
+303 | |         file_info: &mut FileInfo,
+    | |________________________________^ expected 8 parameters, found 9
+    |
+    = note: `set_basic_info` from trait: `fn(&Self, &<Self as FileSystemContext>::FileContext, u32, u64, u64, u64, u64, &mut FileInfo) -> std::result::Result<(), FspError>`
+
+error[E0107]: type alias takes 1 generic argument but 2 generic arguments were supplied
+   --> src\volume\mount\winfsp.rs:356:10
+    |
+356 |     ) -> Result<(), FspError> {
+    |          ^^^^^^   ---------- help: remove the unnecessary generic argument
+    |          |
+    |          expected 1 generic argument
+    |
+note: type alias defined here, with 1 generic parameter: `T`
+   --> src\volume\mount\mod.rs:49:10
+    |
+ 49 | pub type Result<T> = std::result::Result<T, MountError>;
+    |          ^^^^^^ -
+
+error[E0050]: method `set_file_size` has 6 parameters but the declaration in trait `set_file_size` has 5
+   --> src\volume\mount\winfsp.rs:350:9
+    |
+350 | /         &self,
+351 | |         file_name: &U16CStr,
+352 | |         new_size: u64,
+353 | |         _set_allocation_size: bool,
+354 | |         _file_context: usize,
+355 | |         file_info: &mut FileInfo,
+    | |________________________________^ expected 5 parameters, found 6
+    |
+    = note: `set_file_size` from trait: `fn(&Self, &<Self as FileSystemContext>::FileContext, u64, bool, &mut FileInfo) -> std::result::Result<(), FspError>`
+
+error[E0107]: type alias takes 1 generic argument but 2 generic arguments were supplied
+   --> src\volume\mount\winfsp.rs:380:10
+    |
+380 |     ) -> Result<(), FspError> {
+    |          ^^^^^^   ---------- help: remove the unnecessary generic argument
+    |          |
+    |          expected 1 generic argument
+    |
+note: type alias defined here, with 1 generic parameter: `T`
+   --> src\volume\mount\mod.rs:49:10
+    |
+ 49 | pub type Result<T> = std::result::Result<T, MountError>;
+    |          ^^^^^^ -
+
+error[E0049]: method `read_directory` has 1 type parameter but its trait declaration has 0 type parameters
+   --> src\volume\mount\winfsp.rs:424:27
+    |
+424 |           mut add_dir_info: impl FnMut(&DirInfo) -> bool,
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |                             |
+    |                             found 1 type parameter
+    |                             `impl Trait` introduces an implicit type parameter
+    |
+   ::: C:\Users\admin\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\winfsp-0.12.4+winfsp-2.1\src\filesystem\context.rs:155:5
+    |
+155 | /     fn read_directory(
+156 | |         &self,
+157 | |         context: &Self::FileContext,
+158 | |         pattern: Option<&U16CStr>,
+159 | |         marker: DirMarker,
+160 | |         buffer: &mut [u8],
+161 | |     ) -> Result<u32> {
+    | |____________________- expected 0 type parameters
+
+error[E0107]: type alias takes 1 generic argument but 2 generic arguments were supplied
+   --> src\volume\mount\winfsp.rs:474:10
+    |
+474 |     ) -> Result<(), FspError> {
+    |          ^^^^^^   ---------- help: remove the unnecessary generic argument
+    |          |
+    |          expected 1 generic argument
+    |
+note: type alias defined here, with 1 generic parameter: `T`
+   --> src\volume\mount\mod.rs:49:10
+    |
+ 49 | pub type Result<T> = std::result::Result<T, MountError>;
+    |          ^^^^^^ -
+
+error[E0050]: method `get_dir_info_by_name` has 3 parameters but the declaration in trait `get_dir_info_by_name` has 4
+   --> src\volume\mount\winfsp.rs:471:9
+    |
+471 | /         &self,
+472 | |         file_name: &U16CStr,
+473 | |         dir_info: &mut DirInfo,
+    | |______________________________^ expected 4 parameters, found 3
+    |
+    = note: `get_dir_info_by_name` from trait: `fn(&Self, &<Self as FileSystemContext>::FileContext, &U16CStr, &mut DirInfo) -> std::result::Result<(), FspError>`
+
+error[E0046]: not all trait items implemented, missing: `FileContext`
+   --> src\volume\mount\winfsp.rs:131:1
+    |
+131 | impl FileSystemContext for WinFspAdapter {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing `FileContext` in implementation
+    |
+    = help: implement the missing item: `type FileContext = /* Type */;`
+
+error[E0107]: type alias takes 1 generic argument but 2 generic arguments were supplied
+   --> src\volume\mount\winfsp.rs:149:10
+    |
+149 |     ) -> Result<(), FspError> {
+    |          ^^^^^^   ---------- help: remove the unnecessary generic argument
+    |          |
+    |          expected 1 generic argument
+    |
+note: type alias defined here, with 1 generic parameter: `T`
+   --> src\volume\mount\mod.rs:49:10
+    |
+ 49 | pub type Result<T> = std::result::Result<T, MountError>;
+    |          ^^^^^^ -
+
+error[E0107]: type alias takes 1 generic argument but 2 generic arguments were supplied
+   --> src\volume\mount\winfsp.rs:398:10
+    |
+398 |     ) -> Result<(), FspError> {
+    |          ^^^^^^   ---------- help: remove the unnecessary generic argument
+    |          |
+    |          expected 1 generic argument
+    |
+note: type alias defined here, with 1 generic parameter: `T`
+   --> src\volume\mount\mod.rs:49:10
+    |
+ 49 | pub type Result<T> = std::result::Result<T, MountError>;
+    |          ^^^^^^ -
+
+error[E0277]: the trait bound `U16CString: AsRef<OsStr>` is not satisfied
+   --> src\volume\mount\winfsp.rs:139:39
+    |
+139 |         volume_info.set_volume_label(&label);
+    |                     ----------------  ^^^^^ the trait `AsRef<OsStr>` is not implemented for `U16CString`
+    |                     |
+    |                     required by a bound introduced by this call
+    |
+    = help: the following other types implement trait `AsRef<T>`:
+              `U16CString` implements `AsRef<U16CStr>`
+              `U16CString` implements `AsRef<[u16]>`
+              `U16CString` implements `AsRef<widestring::ustr::U16Str>`
+    = note: required for `&U16CString` to implement `AsRef<OsStr>`
+note: required by a bound in `VolumeInfo::set_volume_label`
+   --> C:\Users\admin\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\winfsp-0.12.4+winfsp-2.1\src\filesystem\internals\volumeinfo.rs:23:32
+    |
+ 23 |     pub fn set_volume_label<P: AsRef<OsStr>>(&mut self, volume_label: P) -> &mut Self {
+    |                                ^^^^^^^^^^^^ required by this bound in `VolumeInfo::set_volume_label`
+
+error[E0616]: field `file_info` of struct `OpenFileInfo` is private
+   --> src\volume\mount\winfsp.rs:184:63
+    |
+184 |             Self::fill_file_info(&self, &attr, &mut file_info.file_info);
+    |                                                               ^^^^^^^^^ private field
+
+error[E0616]: field `file_info` of struct `OpenFileInfo` is private
+   --> src\volume\mount\winfsp.rs:206:59
+    |
+206 |         Self::fill_file_info(&self, &attr, &mut file_info.file_info);
+    |                                                           ^^^^^^^^^ private field
+
+error[E0599]: no method named `set_file_name` found for struct `DirInfo` in the current scope
+   --> src\volume\mount\winfsp.rs:437:18
+    |
+437 |         dir_info.set_file_name(&U16CString::from_str(".").unwrap());
+    |                  ^^^^^^^^^^^^^
+    |
+help: there is a method `set_name` with a similar name
+    |
+437 -         dir_info.set_file_name(&U16CString::from_str(".").unwrap());
+437 +         dir_info.set_name(&U16CString::from_str(".").unwrap());
+    |
+
+error[E0609]: no field `file_attributes` on type `DirInfo<_>`
+   --> src\volume\mount\winfsp.rs:438:18
+    |
+438 |         dir_info.file_attributes = FILE_ATTRIBUTE_DIRECTORY;
+    |                  ^^^^^^^^^^^^^^^ unknown field
+
+error[E0599]: no method named `set_file_name` found for struct `DirInfo` in the current scope
+   --> src\volume\mount\winfsp.rs:443:18
+    |
+443 |         dir_info.set_file_name(&U16CString::from_str("..").unwrap());
+    |                  ^^^^^^^^^^^^^
+    |
+help: there is a method `set_name` with a similar name
+    |
+443 -         dir_info.set_file_name(&U16CString::from_str("..").unwrap());
+443 +         dir_info.set_name(&U16CString::from_str("..").unwrap());
+    |
+
+error[E0609]: no field `file_attributes` on type `DirInfo`
+   --> src\volume\mount\winfsp.rs:444:18
+    |
+444 |         dir_info.file_attributes = FILE_ATTRIBUTE_DIRECTORY;
+    |                  ^^^^^^^^^^^^^^^ unknown field
+
+error[E0599]: no method named `set_file_name` found for struct `DirInfo` in the current scope
+   --> src\volume\mount\winfsp.rs:455:22
+    |
+455 |             dir_info.set_file_name(&name_u16);
+    |                      ^^^^^^^^^^^^^
+    |
+help: there is a method `set_name` with a similar name
+    |
+455 -             dir_info.set_file_name(&name_u16);
+455 +             dir_info.set_name(&name_u16);
+    |
+
+error[E0609]: no field `file_attributes` on type `DirInfo<_>`
+   --> src\volume\mount\winfsp.rs:458:22
+    |
+458 |             dir_info.file_attributes = Self::file_type_to_attributes(entry.file_type);
+    |                      ^^^^^^^^^^^^^^^ unknown field
+
+error[E0609]: no field `file_size` on type `DirInfo<_>`
+   --> src\volume\mount\winfsp.rs:459:22
+    |
+459 |             dir_info.file_size = entry.size;
+    |                      ^^^^^^^^^ unknown field
+
+error[E0609]: no field `file_attributes` on type `&mut DirInfo`
+   --> src\volume\mount\winfsp.rs:484:18
+    |
+484 |         dir_info.file_attributes = Self::file_type_to_attributes(attr.file_type);
+    |                  ^^^^^^^^^^^^^^^ unknown field
+
+error[E0609]: no field `file_size` on type `&mut DirInfo`
+   --> src\volume\mount\winfsp.rs:485:18
+    |
+485 |         dir_info.file_size = attr.size;
+    |                  ^^^^^^^^^ unknown field
+
+error[E0599]: no method named `set_file_name` found for mutable reference `&mut DirInfo` in the current scope
+   --> src\volume\mount\winfsp.rs:490:22
+    |
+490 |             dir_info.set_file_name(&name_u16);
+    |                      ^^^^^^^^^^^^^
+    |
+help: there is a method `set_name` with a similar name
+    |
+490 -             dir_info.set_file_name(&name_u16);
+490 +             dir_info.set_name(&name_u16);
+    |
+
+Some errors have detailed explanations: E0046, E0049, E0050, E0053, E0107, E0277, E0407, E0425, E0432...
+For more information about an error, try `rustc --explain E0046`.
+warning: `secure-cryptor` (lib) generated 3 warnings
+error: could not compile `secure-cryptor` (lib) due to 50 previous errors; 3 warnings emitted

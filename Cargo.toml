@@ -100,6 +100,7 @@ hmac = { version = "0.12", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["memoryapi", "winnt", "debugapi", "processthreadsapi", "winbase"] }
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 dirs = "5.0"
 notify-rust = "4.11"
 tray-icon = "0.18"

@@ -4727,6 +4727,7 @@ dependencies = [
  "wasm-bindgen-test",
  "web-sys",
  "winapi",
+ "windows 0.61.3",
  "winfsp",
  "winreg",
  "winres",

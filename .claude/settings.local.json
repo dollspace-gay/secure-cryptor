@@ -61,7 +61,8 @@
       "Bash(wasm-pack:*)",
       "Bash(dir:*)",
       "Bash(wasm-opt:*)",
-      "Bash(tee:*)"
+      "Bash(tee:*)",
+      "Bash(cargo doc:*)"
     ],
     "deny": [],
     "ask": []
