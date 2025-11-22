@@ -30,6 +30,7 @@ pub mod crypto;
 pub mod daemon;
 pub mod error;
 pub mod memory;
+pub mod power;
 pub mod progress;
 pub mod storage;
 pub mod validation;

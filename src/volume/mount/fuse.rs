@@ -457,8 +457,19 @@ pub fn mount(
     password: &str,
     options: MountOptions,
 ) -> Result<FuseMountHandle> {
-    // Open container
-    let container = Container::open(container_path, password)?;
+    // Open container (normal or hidden)
+    let container = if let Some(hidden_offset) = options.hidden_offset {
+        // For hidden volumes, password is the outer password
+        // and hidden_password is the hidden volume password
+        let hidden_pwd = options.hidden_password
+            .as_deref()
+            .ok_or_else(|| MountError::Other("Hidden password required for hidden volume mount".to_string()))?;
+
+        let outer = Container::open(&container_path, password)?;
+        outer.open_hidden_volume(hidden_pwd, hidden_offset)?
+    } else {
+        Container::open(container_path, password)?
+    };
 
     // Get filesystem
     let fs = container.mount_filesystem()?;

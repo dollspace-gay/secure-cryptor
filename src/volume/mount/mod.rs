@@ -65,6 +65,15 @@ pub struct MountOptions {
 
     /// Filesystem name/label
     pub fs_name: Option<String>,
+
+    /// Hidden volume offset (for mounting hidden volumes)
+    /// If set, the container will be opened at this offset as a hidden volume
+    pub hidden_offset: Option<u64>,
+
+    /// Hidden volume password (when mounting hidden volumes)
+    /// This is the password for the hidden volume itself
+    /// The main password parameter to mount() should be the outer volume password
+    pub hidden_password: Option<String>,
 }
 
 impl Default for MountOptions {
@@ -75,6 +84,8 @@ impl Default for MountOptions {
             allow_other: false,
             auto_unmount: true,
             fs_name: Some("SecureCryptor".to_string()),
+            hidden_offset: None,
+            hidden_password: None,
         }
     }
 }

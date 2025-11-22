@@ -72,6 +72,12 @@ pub struct MountedVolumeInfo {
 
     /// Volume size in bytes
     pub size: u64,
+
+    /// Whether this is a hidden volume
+    pub is_hidden: bool,
+
+    /// Hidden volume offset (if this is a hidden volume)
+    pub hidden_offset: Option<u64>,
 }
 
 /// Handle to a mounted volume managed by VolumeManager
@@ -211,22 +217,42 @@ impl VolumeManager {
             }
         }
 
-        // Get container info before mounting
-        let container = Container::open(&container_path, password)?;
-        let size = container.data_size();
-        drop(container);
+        // Get container info and determine password for mounting
+        let (container, size, is_hidden, mount_password) = if let Some(hidden_offset) = options.hidden_offset {
+            // For hidden volumes:
+            // - password parameter is the outer volume password
+            // - options.hidden_password contains the hidden volume password
+            let hidden_pwd = options.hidden_password
+                .as_ref()
+                .ok_or_else(|| VolumeManagerError::Other("Hidden password required for hidden volume mount".to_string()))?;
+
+            let outer = Container::open(&container_path, password)?;
+            let hidden = outer.open_hidden_volume(hidden_pwd, hidden_offset)?;
+            let hidden_size = hidden.data_size();
+            drop(hidden);
+            drop(outer);
+            (container_path.clone(), hidden_size, true, password.to_string())
+        } else {
+            // Mount normal volume
+            let container = Container::open(&container_path, password)?;
+            let size = container.data_size();
+            drop(container);
+            (container_path.clone(), size, false, password.to_string())
+        };
 
         // Mount the volume
-        let mount_handle = super::mount::mount(&container_path, password, options.clone())?;
+        let mount_handle = super::mount::mount(&container_path, &mount_password, options.clone())?;
         let mount_point = mount_handle.mount_point().to_path_buf();
 
         // Create volume info
         let info = MountedVolumeInfo {
-            container_path: container_path.clone(),
+            container_path: container.clone(),
             mount_point,
             read_only: options.read_only,
             mounted_at: std::time::SystemTime::now(),
             size,
+            is_hidden,
+            hidden_offset: options.hidden_offset,
         };
 
         // Store in mounted map

@@ -218,6 +218,8 @@ impl DaemonServer {
                     allow_other: false,
                     auto_unmount: true,
                     fs_name: Some("SecureCryptor".to_string()),
+                    hidden_offset,
+                    hidden_password: None, // TODO: Add hidden password support to daemon protocol
                 };
 
                 match mgr.mount(&container_path, &password, options) {

@@ -623,7 +623,7 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             println!("Enter outer volume password:");
             let outer_password = validation::get_password()?;
 
-            // Open outer container
+            // Verify outer container can be opened
             let outer = Container::open(&container, &outer_password)
                 .map_err(|e| CryptorError::Io(
                     std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
@@ -633,28 +633,61 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             println!("Enter hidden volume password:");
             let hidden_password = validation::get_password()?;
 
-            // Open hidden volume
+            // Verify hidden volume can be opened
             let hidden = outer.open_hidden_volume(&hidden_password, hidden_offset)
                 .map_err(|e| CryptorError::Io(
                     std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
                 ))?;
 
-            // Mount the hidden volume
-            let _manager = VolumeManager::new();
-            let _options = MountOptions {
+            let hidden_size = hidden.data_size();
+            drop(hidden);
+            drop(outer);
+
+            // Mount the hidden volume using VolumeManager
+            let mut manager = VolumeManager::new();
+            let options = MountOptions {
                 mount_point: mount_point.clone(),
                 read_only,
                 allow_other: false,
                 auto_unmount: true,
                 fs_name: Some("SecureCryptor-Hidden".to_string()),
+                hidden_offset: Some(hidden_offset),
+                hidden_password: Some(hidden_password.clone()),
             };
 
-            // Note: We need to mount using the hidden container, not outer
-            // This is a limitation - we'd need to refactor VolumeManager to accept Container directly
-            println!("Note: Mounting hidden volumes requires manual filesystem setup.");
-            println!("  Hidden volume is accessible but advanced mount not yet fully implemented.");
-            println!("  Hidden volume unlocked successfully at offset {}.", hidden_offset);
-            println!("  Size: {} bytes ({} MB)", hidden.data_size(), hidden.data_size() / 1024 / 1024);
+            // Pass the outer password to mount() - it will use hidden_password from options
+            manager.mount(&container, &outer_password, options)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+
+            println!("✓ Hidden volume mounted successfully.");
+            println!("  Container: {}", container.display());
+            println!("  Mount point: {}", mount_point.display());
+            println!("  Offset: {} bytes ({} MB)", hidden_offset, hidden_offset / 1024 / 1024);
+            println!("  Size: {} bytes ({} MB)", hidden_size, hidden_size / 1024 / 1024);
+            if read_only {
+                println!("  Mode: Read-only");
+            }
+            println!("  Press Ctrl+C to unmount and exit.");
+
+            // Wait for Ctrl+C
+            let running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+            let r = running.clone();
+            ctrlc::set_handler(move || {
+                r.store(false, std::sync::atomic::Ordering::SeqCst);
+            }).expect("Error setting Ctrl-C handler");
+
+            while running.load(std::sync::atomic::Ordering::SeqCst) {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+
+            println!("\nUnmounting hidden volume...");
+            manager.unmount(&container)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+            println!("✓ Hidden volume unmounted.");
         }
         VolumeCommands::CheckHidden { container, offset } => {
             println!("Checking for hidden volume in '{}'", container.display());

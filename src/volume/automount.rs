@@ -255,6 +255,8 @@ impl AutoMountService {
             allow_other: false,
             auto_unmount: config.auto_unmount,
             fs_name: Some(config.name.clone()),
+            hidden_offset: None,
+            hidden_password: None,
         };
 
         // Mount using VolumeManager
@@ -298,6 +300,8 @@ impl AutoMountService {
             allow_other: false,
             auto_unmount: volume_config.auto_unmount,
             fs_name: Some(volume_config.name.clone()),
+            hidden_offset: None,
+            hidden_password: None,
         };
 
         // Mount using VolumeManager
