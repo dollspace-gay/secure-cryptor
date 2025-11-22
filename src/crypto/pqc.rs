@@ -68,6 +68,13 @@ impl MlKemKeyPair {
         &self.encapsulation_key
     }
 
+    /// Get the private decapsulation key.
+    ///
+    /// This key must be kept secret and is used to decapsulate shared secrets.
+    pub fn decapsulation_key(&self) -> &[u8] {
+        &self.decapsulation_key
+    }
+
     /// Decapsulate a shared secret from a ciphertext.
     ///
     /// # Arguments
@@ -226,6 +233,65 @@ pub fn encapsulate(
     secret_array.copy_from_slice(&ss);
 
     Ok((ct.to_vec(), secret_array))
+}
+
+/// Decapsulate a shared secret using a decapsulation key and ciphertext.
+///
+/// # Arguments
+///
+/// * `decapsulation_key` - The private decapsulation key (3168 bytes)
+/// * `ciphertext` - The encapsulation ciphertext (1568 bytes)
+///
+/// # Returns
+///
+/// The 32-byte shared secret
+///
+/// # Errors
+///
+/// Returns an error if key or ciphertext sizes are invalid
+pub fn decapsulate(
+    decapsulation_key: &[u8],
+    ciphertext: &[u8],
+) -> Result<Zeroizing<[u8; SHARED_SECRET_SIZE]>> {
+    if decapsulation_key.len() != SECRET_KEY_SIZE {
+        return Err(CryptorError::Cryptography(format!(
+            "Invalid decapsulation key size: expected {}, got {}",
+            SECRET_KEY_SIZE,
+            decapsulation_key.len()
+        )));
+    }
+
+    if ciphertext.len() != CIPHERTEXT_SIZE {
+        return Err(CryptorError::Cryptography(format!(
+            "Invalid ciphertext size: expected {}, got {}",
+            CIPHERTEXT_SIZE,
+            ciphertext.len()
+        )));
+    }
+
+    // Parse the decapsulation key
+    let dk_array: &[u8; SECRET_KEY_SIZE] = decapsulation_key
+        .try_into()
+        .map_err(|_| CryptorError::Cryptography("Invalid decapsulation key size".to_string()))?;
+
+    // Parse the ciphertext
+    let ct_array: &[u8; CIPHERTEXT_SIZE] = ciphertext
+        .try_into()
+        .map_err(|_| CryptorError::Cryptography("Invalid ciphertext size".to_string()))?;
+
+    // Use type alias to simplify
+    type DK = <MlKem1024 as KemCore>::DecapsulationKey;
+    let dk = DK::from_bytes(dk_array.into());
+    let ct = Ciphertext::<MlKem1024>::clone_from_slice(ct_array);
+
+    // Decapsulate to get shared secret (never fails - returns Result<_, Infallible>)
+    let ss = dk.decapsulate(&ct).expect("Decapsulation is infallible");
+
+    // Copy to zeroizing array
+    let mut secret_array = Zeroizing::new([0u8; SHARED_SECRET_SIZE]);
+    secret_array.copy_from_slice(&ss);
+
+    Ok(secret_array)
 }
 
 #[cfg(test)]

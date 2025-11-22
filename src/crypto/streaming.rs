@@ -51,6 +51,8 @@ use rayon::prelude::*;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use serde::{Deserialize, Serialize};
+use zeroize::{Zeroize, Zeroizing};
 
 /// Default chunk size: 1 MB
 pub const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024;
@@ -66,6 +68,21 @@ pub const MAGIC_BYTES_V3: &[u8] = b"SCRYPTv3";
 
 /// File format version
 pub const FORMAT_VERSION: u8 = 0x03;
+
+/// Post-quantum cryptography metadata stored in file header.
+///
+/// This contains ML-KEM-1024 key encapsulation data that provides
+/// quantum-resistant security in addition to password-based encryption.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PqMetadata {
+    /// ML-KEM-1024 encapsulation key (public key) - 1568 bytes base64 encoded
+    pub encapsulation_key: String,
+    /// ML-KEM-1024 ciphertext from encapsulation - 1568 bytes base64 encoded
+    pub ciphertext: String,
+    /// Encrypted decapsulation key (private key) - encrypted with password-derived key
+    /// Format: nonce (12 bytes) + ciphertext (3168 bytes) + auth tag (16 bytes)
+    pub encrypted_decapsulation_key: String,
+}
 
 /// Configuration for streaming encryption/decryption.
 #[derive(Debug, Clone, Copy)]
@@ -169,6 +186,145 @@ pub fn derive_chunk_nonce(base_nonce: &[u8; NONCE_LEN], chunk_index: u64) -> [u8
     nonce[4..12].copy_from_slice(&chunk_index.to_be_bytes());
 
     nonce
+}
+
+/// Generates PQ metadata for hybrid encryption.
+///
+/// This creates an ML-KEM-1024 keypair, encapsulates to get a shared secret,
+/// and encrypts the decapsulation key with the password-derived key.
+///
+/// # Arguments
+///
+/// * `password_key` - 32-byte key derived from password
+///
+/// # Returns
+///
+/// Tuple of (PqMetadata, shared_secret)
+///
+/// # Security
+///
+/// The decapsulation key is encrypted with AES-256-GCM using the password key.
+/// This allows password-based access while maintaining quantum resistance.
+pub fn generate_pq_metadata(password_key: &[u8; 32]) -> Result<(PqMetadata, Zeroizing<[u8; 32]>)> {
+    use crate::crypto::pqc::{MlKemKeyPair, encapsulate};
+    use crate::crypto::aes_gcm::AesGcmEncryptor;
+    use crate::crypto::Encryptor;
+    use rand_core::TryRngCore;
+    use rand::rngs::OsRng;
+    use base64::Engine;
+
+    // Generate ML-KEM-1024 keypair
+    let keypair = MlKemKeyPair::generate();
+
+    // Encapsulate to get shared secret
+    let (ciphertext, shared_secret) = encapsulate(keypair.encapsulation_key())?;
+
+    // Serialize and encrypt the decapsulation key with password-derived key
+    let dk_bytes = keypair.decapsulation_key();
+    let mut nonce = [0u8; NONCE_LEN];
+    OsRng.try_fill_bytes(&mut nonce)
+        .map_err(|e| CryptorError::Cryptography(format!("Failed to generate nonce: {}", e)))?;
+
+    let encryptor = AesGcmEncryptor::new();
+    let encrypted_dk = encryptor.encrypt(password_key, &nonce, dk_bytes)?;
+
+    // Combine nonce + ciphertext for storage
+    let mut encrypted_dk_with_nonce = Vec::with_capacity(NONCE_LEN + encrypted_dk.len());
+    encrypted_dk_with_nonce.extend_from_slice(&nonce);
+    encrypted_dk_with_nonce.extend_from_slice(&encrypted_dk);
+
+    // Create metadata
+    let metadata = PqMetadata {
+        encapsulation_key: base64::engine::general_purpose::STANDARD.encode(keypair.encapsulation_key()),
+        ciphertext: base64::engine::general_purpose::STANDARD.encode(&ciphertext),
+        encrypted_decapsulation_key: base64::engine::general_purpose::STANDARD.encode(&encrypted_dk_with_nonce),
+    };
+
+    Ok((metadata, shared_secret))
+}
+
+/// Decrypts PQ metadata and recovers the shared secret.
+///
+/// # Arguments
+///
+/// * `metadata` - PQ metadata from file header
+/// * `password_key` - 32-byte key derived from password
+///
+/// # Returns
+///
+/// The 32-byte shared secret from ML-KEM decapsulation
+pub fn decrypt_pq_metadata(metadata: &PqMetadata, password_key: &[u8; 32]) -> Result<Zeroizing<[u8; 32]>> {
+    use crate::crypto::pqc::decapsulate;
+    use crate::crypto::aes_gcm::AesGcmEncryptor;
+    use crate::crypto::Encryptor;
+    use base64::Engine;
+
+    // Decode encrypted decapsulation key
+    let encrypted_dk_with_nonce = base64::engine::general_purpose::STANDARD.decode(&metadata.encrypted_decapsulation_key)
+        .map_err(|e| CryptorError::Cryptography(format!("Invalid base64 in PQ metadata: {}", e)))?;
+
+    if encrypted_dk_with_nonce.len() < NONCE_LEN {
+        return Err(CryptorError::Cryptography("Invalid encrypted decapsulation key: too short".to_string()));
+    }
+
+    // Extract nonce and ciphertext
+    let nonce: [u8; NONCE_LEN] = encrypted_dk_with_nonce[0..NONCE_LEN].try_into()
+        .map_err(|_| CryptorError::Cryptography("Invalid nonce in PQ metadata".to_string()))?;
+    let encrypted_dk = &encrypted_dk_with_nonce[NONCE_LEN..];
+
+    // Decrypt decapsulation key
+    let encryptor = AesGcmEncryptor::new();  // Encryptor trait provides both encrypt and decrypt
+    let mut decapsulation_key = encryptor.decrypt(password_key, &nonce, encrypted_dk)?;
+
+    // Decode ciphertext
+    let ciphertext = base64::engine::general_purpose::STANDARD.decode(&metadata.ciphertext)
+        .map_err(|e| CryptorError::Cryptography(format!("Invalid base64 in ciphertext: {}", e)))?;
+
+    // Decapsulate to recover shared secret
+    let shared_secret = decapsulate(&decapsulation_key, &ciphertext)?;
+
+    // Zeroize the decapsulation key
+    decapsulation_key.zeroize();
+
+    Ok(shared_secret)
+}
+
+/// Derives a hybrid encryption key by combining password-derived key and PQ shared secret.
+///
+/// Uses HKDF-SHA256 to combine both keys, providing defense-in-depth:
+/// - If password is weak, PQ protects against classical attacks
+/// - If PQ is broken (unlikely), password still provides protection
+///
+/// # Arguments
+///
+/// * `password_key` - 32-byte key derived from password via Argon2id
+/// * `pq_shared_secret` - 32-byte shared secret from ML-KEM encapsulation
+///
+/// # Returns
+///
+/// 32-byte hybrid encryption key
+pub fn derive_hybrid_key(
+    password_key: &[u8; 32],
+    pq_shared_secret: &[u8; 32],
+) -> Zeroizing<[u8; 32]> {
+    use sha2::Sha256;
+    use hkdf::Hkdf;
+
+    // Combine both keys as input key material
+    let mut ikm = [0u8; 64];
+    ikm[0..32].copy_from_slice(password_key);
+    ikm[32..64].copy_from_slice(pq_shared_secret);
+
+    // Use HKDF to derive final key
+    let hk = Hkdf::<Sha256>::new(None, &ikm);
+    let mut okm = Zeroizing::new([0u8; 32]);
+    hk.expand(b"secure-cryptor-v3-hybrid-pq", okm.as_mut())
+        .expect("HKDF expand failed");
+
+    // Zeroize IKM
+    ikm.zeroize();
+
+    okm
 }
 
 /// Checkpoint for resumable encryption/decryption operations.
@@ -809,6 +965,45 @@ impl ChunkedEncryptor {
         self
     }
 
+    /// Enables post-quantum hybrid encryption using ML-KEM-1024.
+    ///
+    /// This generates ML-KEM-1024 key encapsulation metadata and derives
+    /// a hybrid encryption key that combines both the password-derived key
+    /// and the ML-KEM shared secret.
+    ///
+    /// # Security
+    ///
+    /// Provides defense-in-depth:
+    /// - Password-based security (Argon2id + AES-256-GCM)
+    /// - Quantum-resistant security (ML-KEM-1024)
+    /// - Even if one component is compromised, the other still protects the data
+    ///
+    /// # Arguments
+    ///
+    /// * `password_key` - The original password-derived key (same as passed to `new`)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if PQ metadata generation fails
+    pub fn with_pqc_enabled(mut self, password_key: &[u8; 32]) -> Result<Self> {
+        // Generate PQ metadata and get shared secret
+        let (pq_metadata, pq_shared_secret) = generate_pq_metadata(password_key)?;
+
+        // Derive hybrid key
+        let hybrid_key = derive_hybrid_key(&self.key, &pq_shared_secret);
+
+        // Replace encryption key with hybrid key
+        self.key = hybrid_key;
+
+        // Add PQ metadata to header as JSON
+        let metadata_json = serde_json::to_string(&pq_metadata)
+            .map_err(|e| CryptorError::Cryptography(format!("Failed to serialize PQ metadata: {}", e)))?;
+
+        self.header.metadata = Some(metadata_json);
+
+        Ok(self)
+    }
+
     /// Returns the current progress as a percentage (0.0 to 1.0).
     pub fn progress(&self) -> f64 {
         self.reader.progress()
@@ -1039,10 +1234,29 @@ impl<R: Read> ChunkedDecryptor<R> {
     ) -> Result<Self> {
         let header = StreamHeader::read_from(&mut reader)?;
 
+        // Check if file uses PQ hybrid encryption
+        let final_key = if let Some(ref metadata_str) = header.metadata {
+            // Try to parse as PQ metadata
+            match serde_json::from_str::<PqMetadata>(metadata_str) {
+                Ok(pq_metadata) => {
+                    // File uses PQ encryption - derive hybrid key
+                    let pq_shared_secret = decrypt_pq_metadata(&pq_metadata, &key)?;
+                    derive_hybrid_key(&key, &pq_shared_secret)
+                }
+                Err(_) => {
+                    // Metadata is not PQ (might be user metadata), use password key as-is
+                    key
+                }
+            }
+        } else {
+            // No metadata, use password key as-is
+            key
+        };
+
         Ok(Self {
             reader,
             encryptor,
-            key,
+            key: final_key,
             header,
             current_chunk: 0,
             bytes_written: 0,

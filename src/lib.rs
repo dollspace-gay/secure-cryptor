@@ -106,7 +106,9 @@ pub fn encrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Re
     // Create chunked encryptor
     let encryptor = Box::new(AesGcmEncryptor::new());
     let salt_string = salt.as_str().to_string();
-    let chunked_encryptor = ChunkedEncryptor::new(reader, encryptor, key, base_nonce, salt_string);
+    let key_clone = key.clone();
+    let chunked_encryptor = ChunkedEncryptor::new(reader, encryptor, key, base_nonce, salt_string)
+        .with_pqc_enabled(&key_clone)?; // Enable post-quantum hybrid encryption
 
     // Encrypt to output file atomically
     storage::write_atomically(output_path, |file| {

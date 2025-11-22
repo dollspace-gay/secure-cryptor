@@ -94,6 +94,69 @@ enum VolumeCommands {
         #[arg(short, long)]
         slot: Option<usize>,
     },
+    /// Generate a new recovery key
+    GenerateRecoveryKey {
+        /// Path where to save the recovery key file
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Optional name/description for the container
+        #[arg(short, long)]
+        name: Option<String>,
+    },
+    /// Add a recovery key to a volume
+    AddRecoveryKey {
+        /// Path to the volume container
+        #[arg(short, long)]
+        container: PathBuf,
+        /// Recovery key (64 hex characters) or path to recovery key file
+        #[arg(short, long)]
+        recovery_key: String,
+    },
+    /// Reset password using a recovery key
+    ResetPassword {
+        /// Path to the volume container
+        #[arg(short, long)]
+        container: PathBuf,
+        /// Recovery key (64 hex characters) or path to recovery key file
+        #[arg(short, long)]
+        recovery_key: String,
+    },
+    /// Create a hidden volume within a container
+    CreateHidden {
+        /// Path to the outer volume container
+        #[arg(short, long)]
+        container: PathBuf,
+        /// Size of the hidden volume (e.g., "100M", "1G")
+        #[arg(short, long)]
+        size: String,
+        /// Offset from start of outer data area (e.g., "500M", "1G")
+        #[arg(short, long)]
+        offset: String,
+    },
+    /// Mount a hidden volume
+    MountHidden {
+        /// Path to the outer volume container
+        #[arg(short, long)]
+        container: PathBuf,
+        /// Mount point path
+        #[arg(short, long)]
+        mount_point: PathBuf,
+        /// Offset from start of outer data area (e.g., "500M", "1G")
+        #[arg(short, long)]
+        offset: String,
+        /// Mount as read-only
+        #[arg(short, long, default_value = "false")]
+        read_only: bool,
+    },
+    /// Check if a hidden volume exists at an offset
+    CheckHidden {
+        /// Path to the outer volume container
+        #[arg(short, long)]
+        container: PathBuf,
+        /// Offset to check (e.g., "500M", "1G")
+        #[arg(short, long)]
+        offset: String,
+    },
 }
 
 /// Main application entry point
@@ -338,9 +401,242 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
                 println!("✓ New password added in slot {}.", slot_idx);
             }
         }
+        VolumeCommands::GenerateRecoveryKey { output, name } => {
+            println!("Generating recovery key...");
+
+            // Generate a new recovery key
+            let recovery_key = Container::generate_recovery_key();
+
+            // Export to file
+            Container::export_recovery_key_file(
+                &recovery_key,
+                &output,
+                name.as_deref(),
+            ).map_err(|e| CryptorError::Io(
+                std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+            ))?;
+
+            println!("✓ Recovery key generated and saved to '{}'", output.display());
+            println!("\n  IMPORTANT: Store this file in a secure location!");
+            println!("  Anyone with this recovery key can access encrypted volumes.");
+            println!("\n  You can use this recovery key to:");
+            println!("  - Add it to a volume: secure-cryptor volume add-recovery-key -c <container> -r {}", output.display());
+            println!("  - Reset a password: secure-cryptor volume reset-password -c <container> -r {}", output.display());
+        }
+        VolumeCommands::AddRecoveryKey { container, recovery_key } => {
+            println!("Adding recovery key to '{}'", container.display());
+
+            // Get the recovery key (from file or direct input)
+            let key = load_recovery_key(&recovery_key)?;
+
+            // Get password to unlock the container
+            let password = validation::get_password()?;
+
+            // Open container
+            let mut cont = Container::open(&container, &password)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+
+            // Add recovery key
+            let slot_idx = cont.add_recovery_key(&key)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+
+            println!("✓ Recovery key added to slot {}.", slot_idx);
+            println!("  You can now use this recovery key to reset the password if forgotten.");
+        }
+        VolumeCommands::ResetPassword { container, recovery_key } => {
+            println!("Resetting password for '{}'", container.display());
+
+            // Get the recovery key (from file or direct input)
+            let key = load_recovery_key(&recovery_key)?;
+
+            // Open container using a temporary password attempt
+            // We need to open it first, so we'll try to unlock with the recovery key directly
+            println!("Note: Opening container with recovery key...");
+
+            let mut cont = Container::open(&container, &key)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other,
+                        format!("Failed to unlock with recovery key: {}", e))
+                ))?;
+
+            // Get new password
+            println!("Enter new password:");
+            let new_password = validation::get_and_validate_password()?;
+
+            // Reset password
+            cont.reset_password_with_recovery_key(&key, &new_password)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+
+            println!("✓ Password reset successfully.");
+            println!("  You can now use the new password to access the volume.");
+        }
+        VolumeCommands::CreateHidden { container, size, offset } => {
+            println!("Creating hidden volume in '{}'", container.display());
+
+            // Parse size and offset
+            let hidden_size = parse_size(&size)?;
+            let hidden_offset = parse_size(&offset)?;
+
+            // Get outer volume password
+            println!("Enter outer volume password:");
+            let outer_password = validation::get_password()?;
+
+            // Open outer container
+            let mut outer = Container::open(&container, &outer_password)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+
+            // Get hidden volume password
+            println!("Enter hidden volume password (use a different password!):");
+            let hidden_password = validation::get_and_validate_password()?;
+
+            // Verify passwords are different
+            if outer_password == hidden_password {
+                return Err(CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput,
+                        "Hidden volume password must be different from outer volume password")
+                ));
+            }
+
+            // Create hidden volume
+            outer.create_hidden_volume(hidden_size, &hidden_password, hidden_offset)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+
+            println!("✓ Hidden volume created successfully.");
+            println!("  Container: {}", container.display());
+            println!("  Hidden Size: {} bytes ({} MB)", hidden_size, hidden_size / 1024 / 1024);
+            println!("  Offset: {} bytes ({} MB)", hidden_offset, hidden_offset / 1024 / 1024);
+            println!("\n  IMPORTANT SECURITY NOTES:");
+            println!("  1. Fill the outer volume with decoy data to hide the hidden volume");
+            println!("  2. Never reveal the hidden volume password under duress");
+            println!("  3. Be careful not to overwrite the hidden volume when using the outer volume");
+            println!("  4. The hidden volume is located at offset {} in the outer data area", hidden_offset);
+        }
+        VolumeCommands::MountHidden { container, mount_point, offset, read_only } => {
+            println!("Mounting hidden volume from '{}' at '{}'",
+                container.display(), mount_point.display());
+
+            // Parse offset
+            let hidden_offset = parse_size(&offset)?;
+
+            // Get outer volume password
+            println!("Enter outer volume password:");
+            let outer_password = validation::get_password()?;
+
+            // Open outer container
+            let outer = Container::open(&container, &outer_password)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+
+            // Get hidden volume password
+            println!("Enter hidden volume password:");
+            let hidden_password = validation::get_password()?;
+
+            // Open hidden volume
+            let hidden = outer.open_hidden_volume(&hidden_password, hidden_offset)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+
+            // Mount the hidden volume
+            let mut manager = VolumeManager::new();
+            let options = MountOptions {
+                mount_point: mount_point.clone(),
+                read_only,
+                allow_other: false,
+                auto_unmount: true,
+                fs_name: Some("SecureCryptor-Hidden".to_string()),
+            };
+
+            // Note: We need to mount using the hidden container, not outer
+            // This is a limitation - we'd need to refactor VolumeManager to accept Container directly
+            println!("Note: Mounting hidden volumes requires manual filesystem setup.");
+            println!("  Hidden volume is accessible but advanced mount not yet fully implemented.");
+            println!("  Hidden volume unlocked successfully at offset {}.", hidden_offset);
+            println!("  Size: {} bytes ({} MB)", hidden.data_size(), hidden.data_size() / 1024 / 1024);
+        }
+        VolumeCommands::CheckHidden { container, offset } => {
+            println!("Checking for hidden volume in '{}'", container.display());
+
+            // Parse offset
+            let hidden_offset = parse_size(&offset)?;
+
+            // Get outer volume password
+            let outer_password = validation::get_password()?;
+
+            // Open outer container
+            let outer = Container::open(&container, &outer_password)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+
+            // Check if hidden volume exists
+            if outer.has_hidden_volume(hidden_offset) {
+                println!("✓ A volume header was found at offset {} ({} MB).",
+                    hidden_offset, hidden_offset / 1024 / 1024);
+                println!("  This may be a hidden volume.");
+                println!("  Use 'mount-hidden' to mount it with the correct password.");
+            } else {
+                println!("✗ No volume header found at offset {} ({} MB).",
+                    hidden_offset, hidden_offset / 1024 / 1024);
+                println!("  No hidden volume exists at this location.");
+            }
+        }
     }
 
     Ok(())
+}
+
+/// Load a recovery key from a file or use it directly if it's 64 hex characters
+#[cfg(feature = "encrypted-volumes")]
+fn load_recovery_key(input: &str) -> Result<String, CryptorError> {
+    use std::fs;
+    use std::path::Path;
+
+    // If it's exactly 64 characters and all hex, use it directly
+    if input.len() == 64 && input.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Ok(input.to_string());
+    }
+
+    // Otherwise, try to load from file
+    let path = Path::new(input);
+    if !path.exists() {
+        return Err(CryptorError::Io(
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Recovery key file not found: {}", input)
+            )
+        ));
+    }
+
+    // Read file and extract recovery key
+    let content = fs::read_to_string(path)
+        .map_err(|e| CryptorError::Io(e))?;
+
+    // Look for the recovery key line (64 hex characters on its own line)
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Ok(trimmed.to_string());
+        }
+    }
+
+    Err(CryptorError::Io(
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Could not find valid recovery key (64 hex characters) in file"
+        )
+    ))
 }
 
 /// Handle volume subcommands (stub when feature is disabled)
