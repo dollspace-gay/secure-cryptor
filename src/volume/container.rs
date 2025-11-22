@@ -2,31 +2,42 @@
 ///
 /// This module defines the on-disk format for encrypted containers.
 ///
-/// ## Container Layout
+/// ## Container Layout (V2)
 ///
 /// ```text
-/// ┌─────────────────────────────────────────────────────┐
-/// │ Volume Header (4 KB)                                │
-/// │ - Magic bytes: SECVOL01                             │
-/// │ - Version: 1                                        │
-/// │ - Cipher algorithm                                  │
-/// │ - Volume size, sector size                          │
-/// │ - Timestamps                                        │
-/// └─────────────────────────────────────────────────────┘
-/// ┌─────────────────────────────────────────────────────┐
-/// │ Key Slots (4 KB)                                    │
-/// │ - Up to 8 key slots                                 │
-/// │ - Each slot: active flag, salt, nonce, encrypted MK │
-/// └─────────────────────────────────────────────────────┘
-/// ┌─────────────────────────────────────────────────────┐
-/// │ Encrypted Data Area (variable size)                │
-/// │ - Encrypted filesystem data                         │
-/// │ - Each sector encrypted with AES-256-GCM            │
-/// │ - Sector size from header (typically 4096 bytes)    │
-/// └─────────────────────────────────────────────────────┘
+/// ┌──────────────────────────────────────────────────────────┐
+/// │ Offset: 0x0000 (0 KB)                                    │
+/// │ Primary Volume Header (4 KB)                             │
+/// │ - Magic bytes: SECVOL01                                  │
+/// │ - Version: 2 (with post-quantum support)                 │
+/// │ - Cipher algorithm (AES-256-GCM)                         │
+/// │ - Volume size, sector size                               │
+/// │ - Timestamps, PQ metadata reference                      │
+/// └──────────────────────────────────────────────────────────┘
+/// ┌──────────────────────────────────────────────────────────┐
+/// │ Offset: 0x1000 (4 KB)                                    │
+/// │ Backup Volume Header (4 KB)                              │
+/// │ - Reserved for header redundancy (future use)            │
+/// │ - Enables recovery from primary header corruption        │
+/// └──────────────────────────────────────────────────────────┘
+/// ┌──────────────────────────────────────────────────────────┐
+/// │ Offset: 0x2000 (8 KB)                                    │
+/// │ Key Slots (8 KB - 8 slots × 1KB each)                    │
+/// │ - Up to 8 independent passwords                          │
+/// │ - Each slot: active flag, salt, nonce, encrypted MK      │
+/// │ - Supports multi-user access                             │
+/// └──────────────────────────────────────────────────────────┘
+/// ┌──────────────────────────────────────────────────────────┐
+/// │ Offset: 0x4000 (16 KB)                                   │
+/// │ Encrypted Data Area (user-specified size)                │
+/// │ - Encrypted filesystem/application data                  │
+/// │ - Each sector encrypted with AES-256-GCM                 │
+/// │ - Sector size from header (typically 4096 bytes)         │
+/// │ - Hybrid encryption: ML-KEM-1024 + AES-256-GCM           │
+/// └──────────────────────────────────────────────────────────┘
 /// ```
 ///
-/// Total header size: 8 KB (HEADER_SIZE + KEYSLOTS_SIZE)
+/// Total metadata size: 16 KB (PRIMARY_HEADER + BACKUP_HEADER + KEYSLOTS)
 ///
 /// ## Security Features
 ///
@@ -53,11 +64,46 @@ use crate::crypto::{KeyDerivation, Encryptor};
 use crate::crypto::aes_gcm::AesGcmEncryptor;
 use crate::config::CryptoConfig;
 
-/// Size of the key slots section in bytes (4KB aligned)
-pub const KEYSLOTS_SIZE: usize = 4096;
+// ===================================================================
+// Volume Layout Constants
+// ===================================================================
+//
+// Explicit on-disk layout for encrypted volumes:
+//
+// ┌─────────────────────────────────────────────────────────────────┐
+// │ Offset        │ Size    │ Section                              │
+// ├─────────────────────────────────────────────────────────────────┤
+// │ 0x0000        │ 4 KB    │ Primary Volume Header                │
+// │ 0x1000        │ 4 KB    │ Backup Volume Header (future use)   │
+// │ 0x2000        │ 8 KB    │ Key Slots (8 slots × 1KB each)       │
+// │ 0x4000        │ ...     │ Encrypted Data Area                  │
+// └─────────────────────────────────────────────────────────────────┘
+//
+// Total metadata size: 16 KB (PRIMARY_HEADER + BACKUP_HEADER + KEYSLOTS)
+//
+// This layout provides:
+// - Header redundancy for corruption recovery
+// - Multi-user support via 8 independent key slots
+// - Clear separation of metadata and data
+// - Future extensibility via backup header area
 
-/// Total size of container metadata (header + key slots)
-pub const METADATA_SIZE: usize = HEADER_SIZE + KEYSLOTS_SIZE;
+/// Offset to primary volume header (always at start of file)
+pub const PRIMARY_HEADER_OFFSET: u64 = 0;
+
+/// Offset to backup volume header (reserved for future use - see issue secure-cryptor-6od)
+pub const BACKUP_HEADER_OFFSET: u64 = HEADER_SIZE as u64;
+
+/// Offset to key slots section
+pub const KEYSLOTS_OFFSET: u64 = 2 * HEADER_SIZE as u64; // 8KB
+
+/// Size of the key slots section in bytes (8KB for 8 slots)
+pub const KEYSLOTS_SIZE: usize = 8192;
+
+/// Offset to encrypted data area (after all metadata)
+pub const DATA_AREA_OFFSET: u64 = KEYSLOTS_OFFSET + KEYSLOTS_SIZE as u64; // 16KB
+
+/// Total size of container metadata (headers + key slots)
+pub const METADATA_SIZE: usize = DATA_AREA_OFFSET as usize;
 
 /// Errors that can occur with encrypted containers
 #[derive(Debug, Error)]
@@ -263,8 +309,8 @@ impl Container {
         file.write_all(&padded_keyslots)?;
 
         // Initialize data area with zeros (encrypted later by filesystem)
-        // V2 metadata size = HEADER + PQ_METADATA + KEYSLOTS
-        let v2_metadata_size = HEADER_SIZE as u64 + pq_metadata_size as u64 + KEYSLOTS_SIZE as u64;
+        // V2 metadata size = PRIMARY_HEADER + BACKUP_HEADER + KEYSLOTS = 16KB
+        let v2_metadata_size = DATA_AREA_OFFSET;
         file.set_len(v2_metadata_size + size)?;
         file.sync_all()?;
 
@@ -377,14 +423,8 @@ impl Container {
         };
 
         // Re-read key slots for storage in Container struct
-        // Calculate key slots offset based on header version
-        let keyslots_offset = if header.has_pqc() {
-            HEADER_SIZE as u64 + header.pq_metadata_size() as u64
-        } else {
-            HEADER_SIZE as u64
-        };
-
-        file.seek(SeekFrom::Start(keyslots_offset))?;
+        // Key slots are always at fixed offset in the new layout
+        file.seek(SeekFrom::Start(KEYSLOTS_OFFSET))?;
         let mut keyslots_bytes = vec![0u8; KEYSLOTS_SIZE];
         file.read_exact(&mut keyslots_bytes)?;
         let key_slots: KeySlots = bincode::deserialize(&keyslots_bytes)?;
@@ -519,15 +559,8 @@ impl Container {
         let file = self.file.as_mut()
             .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Container file not open"))?;
 
-        // Calculate key slots offset based on header version
-        let keyslots_offset = if self.header.has_pqc() {
-            HEADER_SIZE as u64 + self.header.pq_metadata_size() as u64
-        } else {
-            HEADER_SIZE as u64
-        };
-
-        // Seek to key slots position
-        file.seek(SeekFrom::Start(keyslots_offset))?;
+        // Seek to key slots position (fixed offset in new layout)
+        file.seek(SeekFrom::Start(KEYSLOTS_OFFSET))?;
 
         // Serialize and write
         let keyslots_bytes = bincode::serialize(&self.key_slots)?;
@@ -690,11 +723,11 @@ impl Container {
             .ok_or_else(|| ContainerError::Other("Container file not open".to_string()))?;
 
         // Write header
-        file.seek(SeekFrom::Start(0))?;
+        file.seek(SeekFrom::Start(PRIMARY_HEADER_OFFSET))?;
         header.write_to(file)?;
 
-        // Write key slots
-        file.seek(SeekFrom::Start(HEADER_SIZE as u64))?;
+        // Write key slots at fixed offset
+        file.seek(SeekFrom::Start(KEYSLOTS_OFFSET))?;
         let mut padded_keyslots = bincode::serialize(&key_slots)?;
         padded_keyslots.resize(KEYSLOTS_SIZE, 0);
         file.write_all(&padded_keyslots)?;
@@ -832,13 +865,9 @@ impl Container {
         self.header.volume_size()
     }
 
-    /// Returns the actual metadata size (header + PQ metadata + keyslots)
+    /// Returns the actual metadata size (primary + backup headers + keyslots = 16KB)
     pub fn metadata_size(&self) -> u64 {
-        if self.header.has_pqc() {
-            HEADER_SIZE as u64 + self.header.pq_metadata_size() as u64 + KEYSLOTS_SIZE as u64
-        } else {
-            METADATA_SIZE as u64
-        }
+        METADATA_SIZE as u64
     }
 
     /// Returns the total file size in bytes (including metadata)
