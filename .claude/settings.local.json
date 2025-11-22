@@ -52,7 +52,8 @@
       "Bash(1)",
       "Bash(robocopy:*)",
       "Bash(exit 0)",
-      "Bash(cargo update:*)"
+      "Bash(cargo update:*)",
+      "Bash(cargo info:*)"
     ],
     "deny": [],
     "ask": []

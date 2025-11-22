@@ -39,6 +39,7 @@ rand_core = "0.10.0-rc-2"
 # rand 0.9 for ML-KEM compatibility (ml-kem uses rand_core 0.9)
 rand09 = { package = "rand", version = "0.9.2" }
 ml-kem = "0.3.0-pre.2"
+ml-dsa = { version = "0.1.0-rc.2", features = ["zeroize"] }
 rpassword = "7.4"
 clap = { version = "4.5", features = ["derive"] }
 thiserror = "1.0"
