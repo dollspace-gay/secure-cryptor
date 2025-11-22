@@ -7,9 +7,11 @@
 //! Memory locking prevents the OS from swapping sensitive data (keys, passwords, plaintext)
 //! to disk, which could leave traces in swap files or hibernation images.
 //!
-//! Additionally, this module provides an encrypted memory pool for defense-in-depth.
+//! Additionally, this module provides an encrypted memory pool for defense-in-depth
+//! and advanced memory scrubbing utilities with multi-pass overwrite capabilities.
 
 pub mod pool;
+pub mod scrub;
 
 use std::fmt;
 use std::ops::{Deref, DerefMut};
