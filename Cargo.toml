@@ -1,10 +1,10 @@
 [package]
-name = "secure-cryptor"
-version = "0.1.0"
+name = "tesseract"
+version = "1.2.0"
 edition = "2021"
 license = "MIT"
-description = "A secure file encryption/decryption library using AES-256-GCM with Argon2id"
-repository = "https://github.com/yourusername/secure-cryptor"
+description = "Tesseract - Advanced encryption suite with post-quantum cryptography"
+repository = "https://github.com/dollspace-gay/Tesseract"
 keywords = ["encryption", "cryptography", "aes-gcm", "argon2", "security"]
 categories = ["cryptography"]
 
@@ -27,20 +27,20 @@ compression = ["dep:flate2"]  # Include DEFLATE compression support
 yubikey = ["dep:hidapi", "dep:sha1", "dep:hmac"]  # YubiKey HMAC-SHA1 challenge-response via USB HID
 
 [lib]
-name = "secure_cryptor"
+name = "tesseract"
 path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "secure-cryptor"
+name = "tesseract"
 path = "src/main.rs"
 
 [[bin]]
-name = "secure-cryptor-gui"
+name = "tesseract-gui"
 path = "src/bin/gui/main.rs"
 
 [[bin]]
-name = "secure-cryptor-register"
+name = "tesseract-register"
 path = "src/bin/register/mod.rs"
 
 [dependencies]

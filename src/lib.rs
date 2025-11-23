@@ -1,4 +1,4 @@
-//! Secure Cryptor - A secure file encryption library
+//! Tesseract - A secure file encryption library
 //!
 //! This library provides secure file encryption and decryption using
 //! AES-256-GCM with Argon2id key derivation.
@@ -15,7 +15,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use secure_cryptor::{encrypt_file, decrypt_file};
+//! use tesseract::{encrypt_file, decrypt_file};
 //! use std::path::Path;
 //!
 //! // Encrypt a file
@@ -95,7 +95,7 @@ use std::path::Path;
 /// # Examples
 ///
 /// ```no_run
-/// # use secure_cryptor::encrypt_file;
+/// # use tesseract::encrypt_file;
 /// # use std::path::Path;
 /// encrypt_file(
 ///     Path::new("document.pdf"),
@@ -183,7 +183,7 @@ pub fn encrypt_file_validated(input_path: &Path, output_path: &Path, password: &
 /// # Examples
 ///
 /// ```no_run
-/// # use secure_cryptor::decrypt_file;
+/// # use tesseract::decrypt_file;
 /// # use std::path::Path;
 /// decrypt_file(
 ///     Path::new("document.pdf.enc"),

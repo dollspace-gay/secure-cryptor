@@ -1,4 +1,4 @@
-// Windows Registry Integration for Secure Cryptor
+// Windows Registry Integration for Tesseract
 // Handles file associations and context menu integration via Windows Registry
 
 #![cfg(windows)]
@@ -8,7 +8,7 @@ use winreg::enums::*;
 use winreg::RegKey;
 
 const PROGID: &str = "SecureCryptor.EncryptedFile";
-const APP_NAME: &str = "Secure Cryptor";
+const APP_NAME: &str = "Tesseract";
 
 /// Install Windows file associations and context menus
 pub fn install(gui_exe: &PathBuf) -> std::io::Result<()> {
@@ -16,10 +16,10 @@ pub fn install(gui_exe: &PathBuf) -> std::io::Result<()> {
     install_context_menus(gui_exe)?;
 
     println!("\nFile associations registered:");
-    println!("  - .enc files will open with Secure Cryptor GUI");
+    println!("  - .enc files will open with Tesseract GUI");
     println!("\nContext menu items added:");
-    println!("  - Right-click any file → 'Encrypt with Secure Cryptor'");
-    println!("  - Right-click .enc file → 'Decrypt with Secure Cryptor'");
+    println!("  - Right-click any file → 'Encrypt with Tesseract'");
+    println!("  - Right-click .enc file → 'Decrypt with Tesseract'");
 
     Ok(())
 }
@@ -51,7 +51,7 @@ fn install_file_association(gui_exe: &PathBuf) -> std::io::Result<()> {
     // Set open command
     let (shell_key, _) = progid_key.create_subkey("shell")?;
     let (open_key, _) = shell_key.create_subkey("open")?;
-    open_key.set_value("", &"Open with Secure Cryptor")?;
+    open_key.set_value("", &"Open with Tesseract")?;
     let (command_key, _) = open_key.create_subkey("command")?;
     command_key.set_value("", &format!("\"{}\" \"%1\"", gui_exe.display()))?;
 
@@ -87,24 +87,24 @@ fn install_context_menus(gui_exe: &PathBuf) -> std::io::Result<()> {
 
     // Add "Encrypt" to all files (*)
     let (all_files, _) = hkcr.create_subkey("*\\shell\\SecureCryptor.Encrypt")?;
-    all_files.set_value("", &"Encrypt with Secure Cryptor")?;
+    all_files.set_value("", &"Encrypt with Tesseract")?;
     all_files.set_value("Icon", &format!("{},0", gui_exe.display()))?;
 
     let (encrypt_command, _) = all_files.create_subkey("command")?;
     encrypt_command.set_value("", &format!("\"{}\" --encrypt \"%1\"", gui_exe.display()))?;
 
-    println!("✓ Added 'Encrypt with Secure Cryptor' context menu");
+    println!("✓ Added 'Encrypt with Tesseract' context menu");
 
     // Add "Decrypt" specifically for .enc files
     let enc_key = hkcr.open_subkey(".enc")?;
     let (enc_shell, _) = enc_key.create_subkey("shell\\SecureCryptor.Decrypt")?;
-    enc_shell.set_value("", &"Decrypt with Secure Cryptor")?;
+    enc_shell.set_value("", &"Decrypt with Tesseract")?;
     enc_shell.set_value("Icon", &format!("{},0", gui_exe.display()))?;
 
     let (decrypt_command, _) = enc_shell.create_subkey("command")?;
     decrypt_command.set_value("", &format!("\"{}\" --decrypt \"%1\"", gui_exe.display()))?;
 
-    println!("✓ Added 'Decrypt with Secure Cryptor' context menu");
+    println!("✓ Added 'Decrypt with Tesseract' context menu");
 
     Ok(())
 }

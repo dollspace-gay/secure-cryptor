@@ -54,7 +54,7 @@ impl CryptoConfig {
     /// # Examples
     ///
     /// ```
-    /// # use secure_cryptor::config::CryptoConfig;
+    /// # use tesseract::config::CryptoConfig;
     /// let config = CryptoConfig::new(32 * 1024, 2, 2); // Lower security, faster
     /// ```
     pub fn new(mem_cost_kib: u32, time_cost: u32, lanes: u32) -> Self {

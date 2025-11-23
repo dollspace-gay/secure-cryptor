@@ -1,4 +1,4 @@
-// macOS Launch Services Integration for Secure Cryptor
+// macOS Launch Services Integration for Tesseract
 // Handles file associations via UTI (Uniform Type Identifiers) and Launch Services
 //
 // NOTE: macOS file association typically requires .app bundles with Info.plist.
@@ -70,10 +70,10 @@ fn is_duti_available() -> bool {
 fn install_with_duti(gui_exe: &PathBuf) -> std::io::Result<()> {
     // Create a temporary UTI configuration file for duti
     let home = get_home_dir()?;
-    let config_path = home.join(".secure-cryptor-duti");
+    let config_path = home.join(".tesseract-duti");
 
     let config_content = format!(
-        "# Secure Cryptor file associations\n{} .enc all\n",
+        "# Tesseract file associations\n{} .enc all\n",
         gui_exe.display()
     );
 

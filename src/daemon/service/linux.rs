@@ -1,4 +1,4 @@
-/// Linux systemd service integration for Secure Cryptor daemon
+/// Linux systemd service integration for Tesseract daemon
 ///
 /// Manages systemd unit file installation and service control
 
@@ -6,8 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const SERVICE_NAME: &str = "secure-cryptor-daemon";
-const SERVICE_FILE: &str = "secure-cryptor-daemon.service";
+const SERVICE_NAME: &str = "tesseract-daemon";
+const SERVICE_FILE: &str = "tesseract-daemon.service";
 
 /// Get the systemd user service directory
 fn get_systemd_user_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -29,8 +29,8 @@ fn get_systemd_system_dir() -> PathBuf {
 fn generate_service_file(exe_path: &Path) -> String {
     format!(
         r#"[Unit]
-Description=Secure Cryptor Volume Manager Daemon
-Documentation=https://github.com/your-repo/secure-cryptor
+Description=Tesseract Volume Manager Daemon
+Documentation=https://github.com/your-repo/tesseract
 After=network.target
 
 [Service]
@@ -58,7 +58,7 @@ pub fn install_service() -> Result<(), Box<dyn std::error::Error>> {
     let exe_path = std::env::current_exe()?;
     let systemd_dir = get_systemd_user_dir()?;
 
-    println!("Installing Secure Cryptor Daemon as systemd user service...");
+    println!("Installing Tesseract Daemon as systemd user service...");
     println!("Executable: {}", exe_path.display());
     println!("Service directory: {}", systemd_dir.display());
 
@@ -97,7 +97,7 @@ pub fn install_system_service() -> Result<(), Box<dyn std::error::Error>> {
     let exe_path = std::env::current_exe()?;
     let systemd_dir = get_systemd_system_dir();
 
-    println!("Installing Secure Cryptor Daemon as systemd system service...");
+    println!("Installing Tesseract Daemon as systemd system service...");
     println!("Note: This requires root privileges");
 
     // Check if running as root
@@ -136,7 +136,7 @@ pub fn uninstall_service() -> Result<(), Box<dyn std::error::Error>> {
     let systemd_dir = get_systemd_user_dir()?;
     let service_path = systemd_dir.join(SERVICE_FILE);
 
-    println!("Uninstalling Secure Cryptor Daemon systemd service...");
+    println!("Uninstalling Tesseract Daemon systemd service...");
 
     // Stop the service if running
     let _ = Command::new("systemctl")

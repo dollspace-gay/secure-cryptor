@@ -1,4 +1,4 @@
-// System tray integration for Secure Cryptor
+// System tray integration for Tesseract
 // Cross-platform support for Windows, Linux, and macOS
 
 use std::path::PathBuf;
@@ -51,7 +51,7 @@ impl TrayManager {
         // Create the tray icon
         let tray_icon = TrayIconBuilder::new()
             .with_menu(Box::new(tray_menu))
-            .with_tooltip("Secure Cryptor")
+            .with_tooltip("Tesseract")
             .with_icon(icon)
             .build()?;
 
@@ -140,7 +140,7 @@ impl TrayManager {
 
     /// Updates the tray tooltip with status information
     pub fn set_status(&mut self, status: &str) {
-        let tooltip = format!("Secure Cryptor - {}", status);
+        let tooltip = format!("Tesseract - {}", status);
         let _ = self._tray_icon.set_tooltip(Some(tooltip));
     }
 }

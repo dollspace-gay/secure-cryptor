@@ -1,4 +1,4 @@
-// Linux Desktop Integration for Secure Cryptor
+// Linux Desktop Integration for Tesseract
 // Handles file associations and desktop entries via XDG standards
 
 #![cfg(target_os = "linux")]
@@ -34,9 +34,9 @@ pub fn install(gui_exe: &PathBuf) -> std::io::Result<()> {
     associate_mime_type(&config_dir)?;
 
     println!("\nFile associations registered:");
-    println!("  - .enc files will open with Secure Cryptor GUI");
+    println!("  - .enc files will open with Tesseract GUI");
     println!("\nDesktop entries added:");
-    println!("  - Application menu entry for Secure Cryptor");
+    println!("  - Application menu entry for Tesseract");
     println!("  - MIME type application/x-enc registered");
 
     Ok(())
@@ -47,14 +47,14 @@ pub fn uninstall() -> std::io::Result<()> {
     let home = get_home_dir()?;
 
     // Remove .desktop file
-    let desktop_file = home.join(".local/share/applications/secure-cryptor.desktop");
+    let desktop_file = home.join(".local/share/applications/tesseract.desktop");
     if desktop_file.exists() {
         fs::remove_file(&desktop_file)?;
         println!("✓ Removed desktop file");
     }
 
     // Remove MIME type definition
-    let mime_file = home.join(".local/share/mime/packages/secure-cryptor.xml");
+    let mime_file = home.join(".local/share/mime/packages/tesseract.xml");
     if mime_file.exists() {
         fs::remove_file(&mime_file)?;
         println!("✓ Removed MIME type definition");
@@ -82,10 +82,10 @@ fn install_desktop_file(apps_dir: &Path, gui_exe: &PathBuf) -> std::io::Result<(
         r#"[Desktop Entry]
 Version=1.0
 Type=Application
-Name=Secure Cryptor
+Name=Tesseract
 Comment=Secure file encryption and decryption tool
 Exec={} %f
-Icon=secure-cryptor
+Icon=tesseract
 Terminal=false
 Categories=Utility;Security;
 MimeType=application/x-enc;
@@ -94,7 +94,7 @@ Keywords=encryption;decryption;security;crypto;
         gui_exe.display()
     );
 
-    let desktop_file = apps_dir.join("secure-cryptor.desktop");
+    let desktop_file = apps_dir.join("tesseract.desktop");
     let mut file = fs::File::create(&desktop_file)?;
     file.write_all(desktop_content.as_bytes())?;
 
@@ -116,14 +116,14 @@ fn install_mime_type(mime_dir: &Path) -> std::io::Result<()> {
     let mime_content = r#"<?xml version="1.0" encoding="UTF-8"?>
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
     <mime-type type="application/x-enc">
-        <comment>Secure Cryptor Encrypted File</comment>
+        <comment>Tesseract Encrypted File</comment>
         <icon name="application-x-enc"/>
         <glob pattern="*.enc"/>
     </mime-type>
 </mime-info>
 "#;
 
-    let mime_file = mime_dir.join("secure-cryptor.xml");
+    let mime_file = mime_dir.join("tesseract.xml");
     let mut file = fs::File::create(&mime_file)?;
     file.write_all(mime_content.as_bytes())?;
 
@@ -165,7 +165,7 @@ fn associate_mime_type(config_dir: &Path) -> std::io::Result<()> {
     };
 
     // Check if association already exists
-    if !content.contains("application/x-enc=secure-cryptor.desktop") {
+    if !content.contains("application/x-enc=tesseract.desktop") {
         // Find [Default Applications] section or create it
         if !content.contains("[Default Applications]") {
             content.push_str("\n[Default Applications]\n");
@@ -178,7 +178,7 @@ fn associate_mime_type(config_dir: &Path) -> std::io::Result<()> {
                 .map(|p| pos + p + 1)
                 .unwrap_or(content.len());
 
-            content.insert_str(insert_pos, "application/x-enc=secure-cryptor.desktop\n");
+            content.insert_str(insert_pos, "application/x-enc=tesseract.desktop\n");
         }
 
         // Write back
@@ -202,7 +202,7 @@ fn remove_mime_association(config_dir: &Path) -> std::io::Result<()> {
     let content = fs::read_to_string(&mimeapps_file)?;
     let new_content: String = content
         .lines()
-        .filter(|line| !line.contains("application/x-enc=secure-cryptor.desktop"))
+        .filter(|line| !line.contains("application/x-enc=tesseract.desktop"))
         .collect::<Vec<_>>()
         .join("\n");
 

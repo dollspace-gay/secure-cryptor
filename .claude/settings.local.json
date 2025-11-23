@@ -62,7 +62,8 @@
       "Bash(dir:*)",
       "Bash(wasm-opt:*)",
       "Bash(tee:*)",
-      "Bash(cargo doc:*)"
+      "Bash(cargo doc:*)",
+      "Bash(target/release/tesseract.exe:*)"
     ],
     "deny": [],
     "ask": []

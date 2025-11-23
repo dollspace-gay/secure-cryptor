@@ -133,7 +133,7 @@ impl ManagedVolume {
 /// # Example
 ///
 /// ```no_run
-/// use secure_cryptor::volume::{VolumeManager, MountOptions};
+/// use tesseract::volume::{VolumeManager, MountOptions};
 /// use std::path::PathBuf;
 ///
 /// let mut manager = VolumeManager::new();

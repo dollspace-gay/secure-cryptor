@@ -1,8 +1,8 @@
-// Cross-platform Registry/File Association Manager for Secure Cryptor
+// Cross-platform Registry/File Association Manager for Tesseract
 //
 // Usage:
-//   secure-cryptor-register install   - Register file associations and context menus
-//   secure-cryptor-register uninstall - Remove all registry entries
+//   tesseract-register install   - Register file associations and context menus
+//   tesseract-register uninstall - Remove all registry entries
 
 use std::env;
 use std::path::PathBuf;
@@ -21,11 +21,11 @@ fn get_gui_exe_path() -> PathBuf {
 
     #[cfg(target_os = "windows")]
     {
-        exe_dir.join("secure-cryptor-gui.exe")
+        exe_dir.join("tesseract-gui.exe")
     }
     #[cfg(not(target_os = "windows"))]
     {
-        exe_dir.join("secure-cryptor-gui")
+        exe_dir.join("tesseract-gui")
     }
 }
 
@@ -45,7 +45,7 @@ fn main() {
 
     match args[1].as_str() {
         "install" => {
-            println!("Installing Secure Cryptor file associations and context menus...");
+            println!("Installing Tesseract file associations and context menus...");
             println!("GUI executable: {}", exe_path.display());
 
             #[cfg(target_os = "windows")]
@@ -75,7 +75,7 @@ fn main() {
             println!("\n✓ Installation complete!");
         }
         "uninstall" => {
-            println!("Uninstalling Secure Cryptor file associations and context menus...");
+            println!("Uninstalling Tesseract file associations and context menus...");
 
             #[cfg(target_os = "windows")]
             {

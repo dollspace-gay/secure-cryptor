@@ -83,7 +83,7 @@ impl Default for MountOptions {
             read_only: false,
             allow_other: false,
             auto_unmount: true,
-            fs_name: Some("SecureCryptor".to_string()),
+            fs_name: Some("Tesseract".to_string()),
             hidden_offset: None,
             hidden_password: None,
         }

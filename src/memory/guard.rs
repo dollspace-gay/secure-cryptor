@@ -28,7 +28,7 @@
 //! # Usage
 //!
 //! ```no_run
-//! use secure_cryptor::memory::guard::GuardedAllocation;
+//! use tesseract::memory::guard::GuardedAllocation;
 //!
 //! // Allocate 1024 bytes with guard pages
 //! let mut alloc = GuardedAllocation::new(1024).unwrap();

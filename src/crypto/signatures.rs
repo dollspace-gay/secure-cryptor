@@ -52,7 +52,7 @@ impl MlDsaKeyPair {
     /// # Example
     ///
     /// ```
-    /// use secure_cryptor::crypto::signatures::{MlDsaKeyPair, SecurityLevel};
+    /// use tesseract::crypto::signatures::{MlDsaKeyPair, SecurityLevel};
     ///
     /// let keypair = MlDsaKeyPair::generate(SecurityLevel::Level65);
     /// ```
@@ -129,7 +129,7 @@ impl MlDsaKeyPair {
     /// # Example
     ///
     /// ```
-    /// use secure_cryptor::crypto::signatures::{MlDsaKeyPair, SecurityLevel};
+    /// use tesseract::crypto::signatures::{MlDsaKeyPair, SecurityLevel};
     ///
     /// let keypair = MlDsaKeyPair::generate(SecurityLevel::Level65);
     /// let message = b"Important message";
@@ -219,7 +219,7 @@ impl MlDsaKeyPair {
 /// # Example
 ///
 /// ```
-/// use secure_cryptor::crypto::signatures::{MlDsaKeyPair, SecurityLevel, verify};
+/// use tesseract::crypto::signatures::{MlDsaKeyPair, SecurityLevel, verify};
 ///
 /// let keypair = MlDsaKeyPair::generate(SecurityLevel::Level65);
 /// let message = b"Important message";

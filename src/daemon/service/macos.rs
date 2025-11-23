@@ -1,4 +1,4 @@
-/// macOS launchd service integration for Secure Cryptor daemon
+/// macOS launchd service integration for Tesseract daemon
 ///
 /// Manages LaunchAgent plist installation and service control
 
@@ -6,8 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const SERVICE_LABEL: &str = "com.secure-cryptor.daemon";
-const PLIST_FILE: &str = "com.secure-cryptor.daemon.plist";
+const SERVICE_LABEL: &str = "com.tesseract.daemon";
+const PLIST_FILE: &str = "com.tesseract.daemon.plist";
 
 /// Get the LaunchAgents directory for the current user
 fn get_launch_agents_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -43,10 +43,10 @@ fn generate_plist(exe_path: &Path, socket_path: &Path) -> String {
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/tmp/secure-cryptor-daemon.log</string>
+    <string>/tmp/tesseract-daemon.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/tmp/secure-cryptor-daemon-error.log</string>
+    <string>/tmp/tesseract-daemon-error.log</string>
 
     <key>EnvironmentVariables</key>
     <dict>
@@ -80,12 +80,12 @@ pub fn install_service() -> Result<(), Box<dyn std::error::Error>> {
 
     // Determine socket path
     let socket_path = if let Ok(runtime_dir) = std::env::var("TMPDIR") {
-        PathBuf::from(runtime_dir).join("secure-cryptor-daemon.sock")
+        PathBuf::from(runtime_dir).join("tesseract-daemon.sock")
     } else {
-        PathBuf::from("/tmp/secure-cryptor-daemon.sock")
+        PathBuf::from("/tmp/tesseract-daemon.sock")
     };
 
-    println!("Installing Secure Cryptor Daemon as LaunchAgent...");
+    println!("Installing Tesseract Daemon as LaunchAgent...");
     println!("Executable: {}", exe_path.display());
     println!("LaunchAgents directory: {}", launch_agents_dir.display());
 
@@ -113,7 +113,7 @@ pub fn uninstall_service() -> Result<(), Box<dyn std::error::Error>> {
     let launch_agents_dir = get_launch_agents_dir()?;
     let plist_path = launch_agents_dir.join(PLIST_FILE);
 
-    println!("Uninstalling Secure Cryptor Daemon LaunchAgent...");
+    println!("Uninstalling Tesseract Daemon LaunchAgent...");
 
     // Unload the service if loaded
     if plist_path.exists() {

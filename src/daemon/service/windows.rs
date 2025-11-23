@@ -1,4 +1,4 @@
-/// Windows Service implementation for Secure Cryptor daemon
+/// Windows Service implementation for Tesseract daemon
 ///
 /// Integrates with Windows Service Control Manager (SCM)
 
@@ -18,7 +18,7 @@ use windows_service::{
 
 use crate::daemon::DaemonServer;
 
-const SERVICE_NAME: &str = "SecureCryptorDaemon";
+const SERVICE_NAME: &str = "TesseractDaemon";
 const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 /// Install the daemon as a Windows service
@@ -28,7 +28,7 @@ pub fn install_service() -> Result<(), Box<dyn std::error::Error>> {
     // Get the current executable path
     let exe_path = std::env::current_exe()?;
 
-    println!("Installing Secure Cryptor Daemon as Windows Service...");
+    println!("Installing Tesseract Daemon as Windows Service...");
     println!("Executable: {}", exe_path.display());
 
     // Use sc.exe to create the service
@@ -37,7 +37,7 @@ pub fn install_service() -> Result<(), Box<dyn std::error::Error>> {
             "create",
             SERVICE_NAME,
             &format!("binPath= \"{}\" --service", exe_path.display()),
-            "DisplayName= \"Secure Cryptor Volume Manager Daemon\"",
+            "DisplayName= \"Tesseract Volume Manager Daemon\"",
             "start= auto",
             "type= own",
         ])
@@ -60,7 +60,7 @@ pub fn install_service() -> Result<(), Box<dyn std::error::Error>> {
 pub fn uninstall_service() -> Result<(), Box<dyn std::error::Error>> {
     use std::process::Command;
 
-    println!("Uninstalling Secure Cryptor Daemon Windows Service...");
+    println!("Uninstalling Tesseract Daemon Windows Service...");
 
     // Stop the service first if it's running
     let _ = Command::new("sc")

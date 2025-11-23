@@ -499,7 +499,7 @@ impl FileSystemContext for WinFspAdapter {
     fn get_volume_info(&self, volume_info: &mut VolumeInfo) -> FspResult<()> {
         volume_info.total_size = 1024 * 1024 * 1024 * 10; // 10 GB
         volume_info.free_size = 1024 * 1024 * 1024 * 5;   // 5 GB free
-        volume_info.set_volume_label("SecureCryptor");
+        volume_info.set_volume_label("Tesseract");
 
         Ok(())
     }
@@ -570,7 +570,7 @@ pub fn mount(
     volume_params.prefix(&mount_point_str);
 
     // Set filesystem name
-    let fs_name = options.fs_name.unwrap_or_else(|| "SecureCryptor".to_string());
+    let fs_name = options.fs_name.unwrap_or_else(|| "Tesseract".to_string());
     volume_params.filesystem_name(&fs_name);
 
     // Set read-only if requested

@@ -73,7 +73,7 @@ impl std::error::Error for MemLockError {}
 /// # Example
 ///
 /// ```
-/// use secure_cryptor::memory::LockedMemory;
+/// use tesseract::memory::LockedMemory;
 ///
 /// let secret = LockedMemory::new([0u8; 32])?;
 /// // Memory is locked in RAM

@@ -6,7 +6,7 @@
 //! # Examples
 //!
 //! ```rust
-//! use secure_cryptor::progress::{ProgressReporter, ProgressCallback};
+//! use tesseract::progress::{ProgressReporter, ProgressCallback};
 //!
 //! fn process_with_progress<P: ProgressReporter>(mut op: P) {
 //!     while !op.is_complete() {
@@ -232,7 +232,7 @@ impl ProgressReporter for ProgressTracker {
 /// # Examples
 ///
 /// ```
-/// use secure_cryptor::progress::format_bytes;
+/// use tesseract::progress::format_bytes;
 ///
 /// assert_eq!(format_bytes(1024), "1.0 KB");
 /// assert_eq!(format_bytes(1024 * 1024), "1.0 MB");
@@ -261,7 +261,7 @@ pub fn format_bytes(bytes: u64) -> String {
 ///
 /// ```
 /// use std::time::Duration;
-/// use secure_cryptor::progress::format_duration;
+/// use tesseract::progress::format_duration;
 ///
 /// assert_eq!(format_duration(Duration::from_secs(90)), "1m 30s");
 /// assert_eq!(format_duration(Duration::from_secs(3665)), "1h 1m 5s");

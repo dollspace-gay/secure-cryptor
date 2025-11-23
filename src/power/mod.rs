@@ -63,7 +63,7 @@ pub type PowerCallback = Box<dyn Fn(PowerEvent) + Send + Sync>;
 /// # Example
 ///
 /// ```no_run
-/// use secure_cryptor::power::{PowerMonitor, PowerEvent};
+/// use tesseract::power::{PowerMonitor, PowerEvent};
 ///
 /// let mut monitor = PowerMonitor::new();
 ///

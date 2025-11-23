@@ -15,6 +15,7 @@ use super::protocol::{DaemonCommand, DaemonResponse};
 
 /// Client for communicating with the daemon
 pub struct DaemonClient {
+    #[allow(dead_code)]
     socket_path: PathBuf,
 }
 
@@ -30,9 +31,9 @@ impl DaemonClient {
     #[cfg(unix)]
     fn default_socket_path() -> PathBuf {
         if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
-            PathBuf::from(runtime_dir).join("secure-cryptor-daemon.sock")
+            PathBuf::from(runtime_dir).join("tesseract-daemon.sock")
         } else {
-            PathBuf::from("/tmp/secure-cryptor-daemon.sock")
+            PathBuf::from("/tmp/tesseract-daemon.sock")
         }
     }
 

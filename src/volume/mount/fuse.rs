@@ -479,7 +479,7 @@ pub fn mount(
 
     // Build mount options
     let mut mount_opts = vec![
-        MountOption::FSName(options.fs_name.unwrap_or_else(|| "SecureCryptor".to_string())),
+        MountOption::FSName(options.fs_name.unwrap_or_else(|| "Tesseract".to_string())),
         MountOption::NoAtime,
     ];
 

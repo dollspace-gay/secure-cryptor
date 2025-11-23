@@ -18,7 +18,7 @@
 //! # Usage
 //!
 //! ```no_run
-//! use secure_cryptor::memory::debugger::{is_debugger_present, DebuggerMonitor};
+//! use tesseract::memory::debugger::{is_debugger_present, DebuggerMonitor};
 //!
 //! // Simple check
 //! if is_debugger_present() {
@@ -251,8 +251,6 @@ impl Drop for DebuggerMonitor {
 /// release builds to avoid interfering with legitimate debugging.
 #[cfg(not(debug_assertions))]
 pub mod anti_debug {
-    use super::*;
-
     /// Timing-based debugger detection
     ///
     /// Measures execution time of a no-op operation. If it takes too long,

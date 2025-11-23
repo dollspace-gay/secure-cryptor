@@ -13,7 +13,7 @@
 //! # Example
 //!
 //! ```
-//! use secure_cryptor::memory::scrub::{scrub_bytes, ScrubPattern};
+//! use tesseract::memory::scrub::{scrub_bytes, ScrubPattern};
 //!
 //! let mut sensitive_data = vec![0x42; 1024];
 //!
@@ -85,7 +85,7 @@ pub struct ScrubStats {
 /// # Example
 ///
 /// ```
-/// use secure_cryptor::memory::scrub::scrub_bytes;
+/// use tesseract::memory::scrub::scrub_bytes;
 ///
 /// let mut secret = vec![0x42; 256];
 /// scrub_bytes(&mut secret);
@@ -115,7 +115,7 @@ pub fn scrub_bytes(data: &mut [u8]) {
 /// # Example
 ///
 /// ```
-/// use secure_cryptor::memory::scrub::{scrub_bytes_pattern, ScrubPattern};
+/// use tesseract::memory::scrub::{scrub_bytes_pattern, ScrubPattern};
 ///
 /// let mut secret = vec![0x42; 256];
 /// let stats = scrub_bytes_pattern(&mut secret, ScrubPattern::Dod522022M);
@@ -200,7 +200,7 @@ pub fn scrub_bytes_pattern(data: &mut [u8], pattern: ScrubPattern) -> ScrubStats
 /// # Example
 ///
 /// ```
-/// use secure_cryptor::memory::scrub::{scrub_and_verify, ScrubPattern};
+/// use tesseract::memory::scrub::{scrub_and_verify, ScrubPattern};
 ///
 /// let mut secret = vec![0x42; 256];
 /// let stats = scrub_and_verify(&mut secret, ScrubPattern::Zero);
@@ -281,7 +281,7 @@ macro_rules! scrub_stack_variable {
 /// # Example
 ///
 /// ```
-/// use secure_cryptor::memory::scrub::ScrubGuard;
+/// use tesseract::memory::scrub::ScrubGuard;
 ///
 /// {
 ///     let secret = vec![0x42; 256];
@@ -356,7 +356,7 @@ impl<T: Zeroize> std::ops::DerefMut for ScrubGuard<T> {
 /// # Example
 ///
 /// ```
-/// use secure_cryptor::memory::scrub::scrub_stack_buffer;
+/// use tesseract::memory::scrub::scrub_stack_buffer;
 ///
 /// let mut buffer = [0x42u8; 256];
 /// scrub_stack_buffer(&mut buffer);
@@ -374,7 +374,7 @@ pub fn scrub_stack_buffer<const N: usize>(buffer: &mut [u8; N]) {
 /// # Example
 ///
 /// ```
-/// use secure_cryptor::memory::scrub::scrub_multiple;
+/// use tesseract::memory::scrub::scrub_multiple;
 ///
 /// let mut buf1 = vec![0x42; 128];
 /// let mut buf2 = vec![0x43; 256];

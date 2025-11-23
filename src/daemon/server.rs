@@ -27,6 +27,7 @@ pub struct DaemonServer {
     mounts: Arc<Mutex<HashMap<PathBuf, MountInfo>>>,
 
     /// Socket path for IPC
+    #[allow(dead_code)]
     socket_path: PathBuf,
 }
 
@@ -47,9 +48,9 @@ impl DaemonServer {
     fn default_socket_path() -> PathBuf {
         // Use XDG_RUNTIME_DIR if available, otherwise /tmp
         if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
-            PathBuf::from(runtime_dir).join("secure-cryptor-daemon.sock")
+            PathBuf::from(runtime_dir).join("tesseract-daemon.sock")
         } else {
-            PathBuf::from("/tmp/secure-cryptor-daemon.sock")
+            PathBuf::from("/tmp/tesseract-daemon.sock")
         }
     }
 

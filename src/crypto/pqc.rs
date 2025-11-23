@@ -46,7 +46,7 @@ impl MlKemKeyPair {
     /// # Example
     ///
     /// ```
-    /// use secure_cryptor::crypto::pqc::MlKemKeyPair;
+    /// use tesseract::crypto::pqc::MlKemKeyPair;
     ///
     /// let keypair = MlKemKeyPair::generate();
     /// ```
@@ -194,7 +194,7 @@ impl MlKemKeyPair {
 /// # Example
 ///
 /// ```
-/// use secure_cryptor::crypto::pqc::{MlKemKeyPair, encapsulate};
+/// use tesseract::crypto::pqc::{MlKemKeyPair, encapsulate};
 ///
 /// let keypair = MlKemKeyPair::generate();
 /// let (ciphertext, shared_secret) = encapsulate(keypair.encapsulation_key()).unwrap();

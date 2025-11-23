@@ -1,10 +1,10 @@
-//! Secure Cryptor - Command-line file encryption tool
+//! Tesseract - Command-line file encryption tool
 //!
 //! A secure file encryptor/decryptor using AES-256-GCM encryption
 //! with Argon2id key derivation.
 
 use clap::{Parser, Subcommand};
-use secure_cryptor::{validation, CryptorError};
+use tesseract::{validation, CryptorError};
 use std::path::PathBuf;
 
 /// Command-line interface definition
@@ -222,7 +222,7 @@ fn encrypt_file_interactive(
     output_path: &std::path::Path,
 ) -> Result<(), CryptorError> {
     let password = validation::get_and_validate_password()?;
-    secure_cryptor::encrypt_file(input_path, output_path, &password)?;
+    tesseract::encrypt_file(input_path, output_path, &password)?;
     Ok(())
 }
 
@@ -232,14 +232,14 @@ fn decrypt_file_interactive(
     output_path: &std::path::Path,
 ) -> Result<(), CryptorError> {
     let password = validation::get_password()?;
-    secure_cryptor::decrypt_file(input_path, output_path, &password)?;
+    tesseract::decrypt_file(input_path, output_path, &password)?;
     Ok(())
 }
 
 /// Handle volume subcommands
 #[cfg(feature = "encrypted-volumes")]
 fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
-    use secure_cryptor::volume::{Container, VolumeManager, MountOptions};
+    use tesseract::volume::{Container, VolumeManager, MountOptions};
 
     match cmd {
         VolumeCommands::Create { container, size, mount_point } => {
@@ -274,7 +274,7 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
                     read_only: false,
                     allow_other: false,
                     auto_unmount: true,
-                    fs_name: Some("SecureCryptor".to_string()),
+                    fs_name: Some("Tesseract".to_string()),
                 };
 
                 manager.mount(&container, &password, options)
@@ -315,7 +315,7 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
                 read_only,
                 allow_other: false,
                 auto_unmount: true,
-                fs_name: Some("SecureCryptor".to_string()),
+                fs_name: Some("Tesseract".to_string()),
             };
 
             manager.mount(&container, &password, options)
@@ -349,14 +349,14 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             println!("✓ Volume unmounted.");
         }
         VolumeCommands::Unmount { path } => {
-            use secure_cryptor::daemon::DaemonClient;
+            use tesseract::daemon::DaemonClient;
 
             // Try to use daemon for unmount
             let client = DaemonClient::new();
 
             if !client.is_running() {
                 println!("Error: Daemon is not running.");
-                println!("Start the daemon with: secure-cryptor daemon start");
+                println!("Start the daemon with: tesseract daemon start");
                 return Err(CryptorError::Io(
                     std::io::Error::new(std::io::ErrorKind::Other, "Daemon not running")
                 ));
@@ -365,7 +365,7 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             // Unmount by path (could be container or mount point)
             match client.unmount(path.clone()) {
                 Ok(response) => {
-                    if let secure_cryptor::daemon::DaemonResponse::Success { message } = response {
+                    if let tesseract::daemon::DaemonResponse::Success { message } = response {
                         println!("✓ {}", message);
                     } else {
                         println!("✓ Volume unmounted successfully.");
@@ -379,14 +379,14 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             }
         }
         VolumeCommands::List => {
-            use secure_cryptor::daemon::DaemonClient;
+            use tesseract::daemon::DaemonClient;
 
             // Try to use daemon for list
             let client = DaemonClient::new();
 
             if !client.is_running() {
                 println!("Error: Daemon is not running.");
-                println!("Start the daemon with: secure-cryptor daemon start");
+                println!("Start the daemon with: tesseract daemon start");
                 return Err(CryptorError::Io(
                     std::io::Error::new(std::io::ErrorKind::Other, "Daemon not running")
                 ));
@@ -394,7 +394,7 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
 
             match client.list() {
                 Ok(response) => {
-                    if let secure_cryptor::daemon::DaemonResponse::MountList { mounts } = response {
+                    if let tesseract::daemon::DaemonResponse::MountList { mounts } = response {
                         if mounts.is_empty() {
                             println!("No volumes currently mounted.");
                         } else {
@@ -511,8 +511,8 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             println!("\n  IMPORTANT: Store this file in a secure location!");
             println!("  Anyone with this recovery key can access encrypted volumes.");
             println!("\n  You can use this recovery key to:");
-            println!("  - Add it to a volume: secure-cryptor volume add-recovery-key -c <container> -r {}", output.display());
-            println!("  - Reset a password: secure-cryptor volume reset-password -c <container> -r {}", output.display());
+            println!("  - Add it to a volume: tesseract volume add-recovery-key -c <container> -r {}", output.display());
+            println!("  - Reset a password: tesseract volume reset-password -c <container> -r {}", output.display());
         }
         VolumeCommands::AddRecoveryKey { container, recovery_key } => {
             println!("Adding recovery key to '{}'", container.display());
@@ -650,7 +650,7 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
                 read_only,
                 allow_other: false,
                 auto_unmount: true,
-                fs_name: Some("SecureCryptor-Hidden".to_string()),
+                fs_name: Some("Tesseract-Hidden".to_string()),
                 hidden_offset: Some(hidden_offset),
                 hidden_password: Some(hidden_password.clone()),
             };
@@ -717,7 +717,7 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             }
         }
         VolumeCommands::MigrateToPqc { container, keypair_output } => {
-            use secure_cryptor::volume::VolumeMigration;
+            use tesseract::volume::VolumeMigration;
             use std::fs;
 
             println!("Migrating volume '{}' to V2 with post-quantum cryptography", container.display());
@@ -835,11 +835,11 @@ fn handle_volume_command(_cmd: VolumeCommands) -> Result<(), CryptorError> {
 
 /// Handle daemon subcommands
 fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
-    use secure_cryptor::daemon::{DaemonServer, DaemonClient};
+    use tesseract::daemon::{DaemonServer, DaemonClient};
 
     match cmd {
         DaemonCommands::Start => {
-            println!("Starting Secure Cryptor Daemon...");
+            println!("Starting Tesseract Daemon...");
             let server = DaemonServer::new();
             server.run()
                 .map_err(|e| CryptorError::Io(
@@ -847,7 +847,7 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
                 ))?;
         }
         DaemonCommands::Stop => {
-            println!("Stopping Secure Cryptor Daemon...");
+            println!("Stopping Tesseract Daemon...");
             let client = DaemonClient::new();
 
             if !client.is_running() {
@@ -855,7 +855,7 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
                 return Ok(());
             }
 
-            match client.send_command(secure_cryptor::daemon::DaemonCommand::Shutdown) {
+            match client.send_command(tesseract::daemon::DaemonCommand::Shutdown) {
                 Ok(_) => println!("✓ Daemon stopped successfully."),
                 Err(e) => {
                     return Err(CryptorError::Io(
@@ -871,9 +871,9 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
                 println!("✓ Daemon is running.");
 
                 // Try to get ping response
-                match client.send_command(secure_cryptor::daemon::DaemonCommand::Ping) {
+                match client.send_command(tesseract::daemon::DaemonCommand::Ping) {
                     Ok(response) => {
-                        if let secure_cryptor::daemon::DaemonResponse::Pong = response {
+                        if let tesseract::daemon::DaemonResponse::Pong = response {
                             println!("  Status: Healthy");
                         }
                     }
@@ -888,7 +888,7 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
         DaemonCommands::InstallService => {
             #[cfg(windows)]
             {
-                use secure_cryptor::daemon::service;
+                use tesseract::daemon::service;
                 service::install_service()
                     .map_err(|e| CryptorError::Io(
                         std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
@@ -896,7 +896,7 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
             }
             #[cfg(target_os = "linux")]
             {
-                use secure_cryptor::daemon::service;
+                use tesseract::daemon::service;
                 service::install_service()
                     .map_err(|e| CryptorError::Io(
                         std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
@@ -904,7 +904,7 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
             }
             #[cfg(target_os = "macos")]
             {
-                use secure_cryptor::daemon::service;
+                use tesseract::daemon::service;
                 service::install_service()
                     .map_err(|e| CryptorError::Io(
                         std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
@@ -914,7 +914,7 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
         DaemonCommands::UninstallService => {
             #[cfg(windows)]
             {
-                use secure_cryptor::daemon::service;
+                use tesseract::daemon::service;
                 service::uninstall_service()
                     .map_err(|e| CryptorError::Io(
                         std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
@@ -922,7 +922,7 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
             }
             #[cfg(target_os = "linux")]
             {
-                use secure_cryptor::daemon::service;
+                use tesseract::daemon::service;
                 service::uninstall_service()
                     .map_err(|e| CryptorError::Io(
                         std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
@@ -930,7 +930,7 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
             }
             #[cfg(target_os = "macos")]
             {
-                use secure_cryptor::daemon::service;
+                use tesseract::daemon::service;
                 service::uninstall_service()
                     .map_err(|e| CryptorError::Io(
                         std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
@@ -942,7 +942,7 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
             {
                 use std::process::Command;
                 let output = Command::new("sc")
-                    .args(&["start", "SecureCryptorDaemon"])
+                    .args(&["start", "TesseractDaemon"])
                     .output()
                     .map_err(|e| CryptorError::Io(e))?;
 
@@ -957,7 +957,7 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
             }
             #[cfg(target_os = "linux")]
             {
-                use secure_cryptor::daemon::service;
+                use tesseract::daemon::service;
                 service::start_service()
                     .map_err(|e| CryptorError::Io(
                         std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
@@ -965,7 +965,7 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
             }
             #[cfg(target_os = "macos")]
             {
-                use secure_cryptor::daemon::service;
+                use tesseract::daemon::service;
                 service::load_service()
                     .map_err(|e| CryptorError::Io(
                         std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
@@ -977,7 +977,7 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
             {
                 use std::process::Command;
                 let output = Command::new("sc")
-                    .args(&["stop", "SecureCryptorDaemon"])
+                    .args(&["stop", "TesseractDaemon"])
                     .output()
                     .map_err(|e| CryptorError::Io(e))?;
 
@@ -992,7 +992,7 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
             }
             #[cfg(target_os = "linux")]
             {
-                use secure_cryptor::daemon::service;
+                use tesseract::daemon::service;
                 service::stop_service()
                     .map_err(|e| CryptorError::Io(
                         std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
@@ -1000,7 +1000,7 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
             }
             #[cfg(target_os = "macos")]
             {
-                use secure_cryptor::daemon::service;
+                use tesseract::daemon::service;
                 service::unload_service()
                     .map_err(|e| CryptorError::Io(
                         std::io::Error::new(std::io::ErrorKind::Other, e.to_string())

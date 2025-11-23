@@ -1,8 +1,8 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use secure_cryptor::crypto::pqc::{MlKemKeyPair, encapsulate};
-use secure_cryptor::crypto::kdf::Argon2Kdf;
-use secure_cryptor::crypto::{Encryptor, KeyDerivation};
-use secure_cryptor::SecureAllocator;
+use tesseract::crypto::pqc::{MlKemKeyPair, encapsulate};
+use tesseract::crypto::kdf::Argon2Kdf;
+use tesseract::crypto::{Encryptor, KeyDerivation};
+use tesseract::SecureAllocator;
 use std::alloc::{GlobalAlloc, Layout};
 
 fn bench_ml_kem_keypair_generation(c: &mut Criterion) {
@@ -122,7 +122,7 @@ fn bench_hybrid_mode_operations(c: &mut Criterion) {
 
     group.bench_function("hybrid_encryption_1kb", |b| {
         let plaintext = vec![0x42u8; 1024];
-        let encryptor = secure_cryptor::crypto::aes_gcm::AesGcmEncryptor;
+        let encryptor = tesseract::crypto::aes_gcm::AesGcmEncryptor;
         let nonce = [0u8; 12];
 
         b.iter(|| {
@@ -133,7 +133,7 @@ fn bench_hybrid_mode_operations(c: &mut Criterion) {
 
     group.bench_function("hybrid_decryption_1kb", |b| {
         let plaintext = vec![0x42u8; 1024];
-        let encryptor = secure_cryptor::crypto::aes_gcm::AesGcmEncryptor;
+        let encryptor = tesseract::crypto::aes_gcm::AesGcmEncryptor;
         let nonce = [0u8; 12];
         let ciphertext = encryptor.encrypt(&*hybrid_key, &nonce, &plaintext).unwrap();
 
@@ -221,7 +221,7 @@ fn bench_pqc_data_sizes(c: &mut Criterion) {
     let mut hybrid_key = zeroize::Zeroizing::new([0u8; 32]);
     hk.expand(&*pq_secret, &mut *hybrid_key).unwrap();
 
-    let encryptor = secure_cryptor::crypto::aes_gcm::AesGcmEncryptor;
+    let encryptor = tesseract::crypto::aes_gcm::AesGcmEncryptor;
 
     for size in [1024, 4096, 16384, 65536, 262144].iter() {
         group.bench_with_input(BenchmarkId::new("encrypt", size), size, |b, &size| {
@@ -250,7 +250,7 @@ fn bench_pqc_data_sizes(c: &mut Criterion) {
 }
 
 fn bench_volume_header_pqc(c: &mut Criterion) {
-    use secure_cryptor::volume::header::{VolumeHeader, PqVolumeMetadata, PqAlgorithm};
+    use tesseract::volume::header::{VolumeHeader, PqVolumeMetadata, PqAlgorithm};
 
     let mut group = c.benchmark_group("volume_header_pqc");
 

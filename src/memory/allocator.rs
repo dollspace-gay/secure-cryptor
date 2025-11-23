@@ -13,7 +13,7 @@
 //! # Usage
 //!
 //! ```no_run
-//! use secure_cryptor::memory::allocator::SecureAllocator;
+//! use tesseract::memory::allocator::SecureAllocator;
 //! use std::alloc::{GlobalAlloc, Layout};
 //!
 //! static SECURE_ALLOC: SecureAllocator = SecureAllocator::new();

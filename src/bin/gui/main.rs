@@ -1,4 +1,4 @@
-// Native GUI for Secure Cryptor using egui
+// Native GUI for Tesseract using egui
 // Matches the exact design from mockup
 
 #![windows_subsystem = "windows"]
@@ -6,7 +6,7 @@
 mod tray;
 
 use eframe::egui;
-use secure_cryptor::{
+use tesseract::{
     ChunkedDecryptor, ChunkedEncryptor, ChunkedReader, StreamConfig,
     crypto::{aes_gcm::AesGcmEncryptor, kdf::Argon2Kdf, KeyDerivation},
     validation::validate_password,
@@ -56,12 +56,12 @@ fn main() -> eframe::Result<()> {
             .with_inner_size([1024.0, 768.0])
             .with_resizable(true)
             .with_min_inner_size([900.0, 700.0])
-            .with_title("Secure Cryptor"),
+            .with_title("Tesseract"),
         ..Default::default()
     };
 
     eframe::run_native(
-        "Secure Cryptor",
+        "Tesseract",
         options,
         Box::new(move |cc| {
             // Set custom theme with rounded corners
@@ -119,7 +119,7 @@ impl Settings {
     fn config_path() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("SecureCryptor")
+            .join("Tesseract")
             .join("settings.json")
     }
 }
@@ -130,7 +130,7 @@ fn show_notification(title: &str, message: &str, _is_error: bool) {
     let _ = Notification::new()
         .summary(title)
         .body(message)
-        .appname("Secure Cryptor")
+        .appname("Tesseract")
         .show();
 }
 
@@ -139,7 +139,7 @@ fn notify_success(operation: &str, filename: &str, enabled: bool) {
         return;
     }
     show_notification(
-        "Secure Cryptor",
+        "Tesseract",
         &format!("{} completed: {}", operation, filename),
         false,
     );
@@ -150,7 +150,7 @@ fn notify_error(operation: &str, error: &str, enabled: bool) {
         return;
     }
     show_notification(
-        "Secure Cryptor - Error",
+        "Tesseract - Error",
         &format!("{} failed: {}", operation, error),
         true,
     );
@@ -165,21 +165,25 @@ fn notify_queue_complete(total: usize, succeeded: usize, failed: usize, enabled:
     } else {
         format!("Queue processing complete! {} succeeded, {} failed out of {} total.", succeeded, failed, total)
     };
-    show_notification("Secure Cryptor - Queue Complete", &message, failed > 0);
+    show_notification("Tesseract - Queue Complete", &message, failed > 0);
 }
 
 #[derive(PartialEq, Clone)]
 enum Mode {
     Encrypt,
     Decrypt,
+    #[allow(dead_code)]
     Volume,
 }
 
 #[derive(PartialEq, Clone)]
 enum VolumeTab {
     Create,
+    #[allow(dead_code)]
     Mount,
+    #[allow(dead_code)]
     Info,
+    #[allow(dead_code)]
     Password,
 }
 
@@ -236,16 +240,26 @@ struct CryptorApp {
     window_visible: bool,
     // Volume management fields
     #[cfg(feature = "encrypted-volumes")]
-    volume_manager: Option<secure_cryptor::volume::VolumeManager>,
+    volume_manager: Option<tesseract::volume::VolumeManager>,
+    #[allow(dead_code)]
     volume_tab: VolumeTab,
+    #[allow(dead_code)]
     volume_container_path: String,
+    #[allow(dead_code)]
     volume_mount_point: String,
+    #[allow(dead_code)]
     volume_size: String,
+    #[allow(dead_code)]
     volume_password: String,
+    #[allow(dead_code)]
     volume_password_confirm: String,
+    #[allow(dead_code)]
     volume_read_only: bool,
+    #[allow(dead_code)]
     volume_status: String,
-    mounted_volumes: Vec<secure_cryptor::volume::MountedVolumeInfo>,
+    #[allow(dead_code)]
+    mounted_volumes: Vec<tesseract::volume::MountedVolumeInfo>,
+    #[allow(dead_code)]
     volume_info: Option<String>,
 }
 
@@ -292,7 +306,7 @@ impl CryptorApp {
             window_visible: true,
             // Volume management fields
             #[cfg(feature = "encrypted-volumes")]
-            volume_manager: Some(secure_cryptor::volume::VolumeManager::new()),
+            volume_manager: Some(tesseract::volume::VolumeManager::new()),
             volume_tab: VolumeTab::Create,
             volume_container_path: String::new(),
             volume_mount_point: String::new(),
@@ -859,7 +873,7 @@ impl CryptorApp {
 
     #[cfg(feature = "encrypted-volumes")]
     fn render_volume_ui(&mut self, ui: &mut egui::Ui) {
-        use secure_cryptor::volume::Container;
+        use tesseract::volume::Container;
 
         // Tab buttons
         ui.vertical_centered(|ui| {
@@ -1111,7 +1125,7 @@ impl CryptorApp {
 
                             #[cfg(feature = "encrypted-volumes")]
                             {
-                                use secure_cryptor::volume::MountOptions;
+                                use tesseract::volume::MountOptions;
 
                                 if let Some(ref mut manager) = self.volume_manager {
                                     let options = MountOptions {
@@ -1119,7 +1133,9 @@ impl CryptorApp {
                                         read_only: self.volume_read_only,
                                         allow_other: false,
                                         auto_unmount: true,
-                                        fs_name: Some("SecureCryptor".to_string()),
+                                        fs_name: Some("Tesseract".to_string()),
+                                        hidden_offset: None,
+                                        hidden_password: None,
                                     };
 
                                     match manager.mount(
@@ -1534,7 +1550,7 @@ impl eframe::App for CryptorApp {
 
                         // Title
                         ui.vertical_centered(|ui| {
-                            ui.label(egui::RichText::new("Secure Cryptor")
+                            ui.label(egui::RichText::new("Tesseract")
                                 .size(42.0)
                                 .color(egui::Color32::from_rgb(50, 50, 50)));
                         });
