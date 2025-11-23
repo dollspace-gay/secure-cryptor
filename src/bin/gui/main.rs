@@ -1620,7 +1620,7 @@ impl eframe::App for CryptorApp {
                                 #[cfg(feature = "encrypted-volumes")]
                                 {
                                     let volume_color = if self.mode == Some(Mode::Volume) {
-                                        egui::Color32::from_rgb(144, 238, 144)
+                                        egui::Color32::from_rgb(245, 169, 184)
                                     } else {
                                         egui::Color32::from_rgb(200, 200, 200)
                                     };

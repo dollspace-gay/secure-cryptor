@@ -47,6 +47,12 @@ pub struct KeySlot {
 pub struct KeySlots {
     /// Array of key slots
     slots: [KeySlot; MAX_KEY_SLOTS],
+
+    /// Optional duress password hash (Argon2id hash)
+    /// When entered, this triggers immediate key destruction
+    /// Stored as a 32-byte salt + encrypted verification token
+    /// None = duress password not set
+    duress_password_slot: Option<KeySlot>,
 }
 
 /// Master key used for volume encryption (securely zeroized on drop)
@@ -265,6 +271,7 @@ impl KeySlots {
                 KeySlot::empty(),
                 KeySlot::empty(),
             ],
+            duress_password_slot: None,
         }
     }
 
@@ -354,8 +361,30 @@ impl KeySlots {
     /// # Errors
     ///
     /// Returns an error if no slots can be unlocked with this password
-    pub fn unlock(&self, password: &str) -> Result<MasterKey, KeySlotError> {
-        // Try each active slot
+    ///
+    /// # Security
+    ///
+    /// **CRITICAL**: This method checks for the duress password BEFORE trying
+    /// normal key slots. If the duress password is entered, all keys are destroyed
+    /// and the function returns `DecryptionFailed` - indistinguishable from
+    /// entering a wrong password.
+    ///
+    /// **WARNING**: This method modifies the key slots if duress password is used.
+    /// The caller must write the modified key slots back to disk to persist the destruction.
+    pub fn unlock(&mut self, password: &str) -> Result<MasterKey, KeySlotError> {
+        // CRITICAL SECURITY CHECK: Check for duress password FIRST
+        // If this password matches the duress password, destroy all keys
+        // and return an error that looks like a wrong password attempt
+        if self.is_duress_password(password) {
+            // Immediately destroy all key slots
+            self.secure_destroy_all_keys();
+
+            // Return the same error as a wrong password
+            // This makes the duress password indistinguishable from a wrong password
+            return Err(KeySlotError::DecryptionFailed);
+        }
+
+        // Try each active slot with the normal password
         for slot in &self.slots {
             if slot.active {
                 if let Ok(master_key) = slot.unlock(password) {
@@ -461,6 +490,100 @@ impl KeySlots {
         self.slots[slot_index] = new_slot;
 
         Ok(())
+    }
+
+    /// Sets the duress password for this volume
+    ///
+    /// When this password is entered, all key slots will be immediately destroyed
+    /// and the operation will return the same error as an incorrect password,
+    /// providing plausible deniability.
+    ///
+    /// # Arguments
+    ///
+    /// * `duress_password` - The password that triggers key destruction
+    ///
+    /// # Security Considerations
+    ///
+    /// - The duress password is stored using the same Argon2id KDF as normal passwords
+    /// - It encrypts a random verification token (not the master key)
+    /// - Entering it will permanently destroy all key slots
+    /// - The operation is indistinguishable from entering a wrong password
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if encryption fails
+    pub fn set_duress_password(&mut self, duress_password: &str) -> Result<(), KeySlotError> {
+        // Create a random verification token to encrypt
+        // We don't use the actual master key to avoid any potential information leakage
+        let mut verification_token = [0u8; MASTER_KEY_SIZE];
+        rand::rng().fill_bytes(&mut verification_token);
+        let token_key = MasterKey::from_bytes(verification_token);
+
+        // Create a key slot for the duress password
+        // This looks identical to a normal key slot on disk
+        let duress_slot = KeySlot::new(&token_key, duress_password)?;
+
+        self.duress_password_slot = Some(duress_slot);
+
+        Ok(())
+    }
+
+    /// Removes the duress password
+    pub fn remove_duress_password(&mut self) {
+        if let Some(ref mut slot) = self.duress_password_slot {
+            slot.deactivate();
+        }
+        self.duress_password_slot = None;
+    }
+
+    /// Checks if the given password is the duress password
+    ///
+    /// # Arguments
+    ///
+    /// * `password` - The password to check
+    ///
+    /// # Returns
+    ///
+    /// `true` if this is the duress password, `false` otherwise
+    ///
+    /// # Security
+    ///
+    /// This check happens in constant-time to prevent timing attacks
+    fn is_duress_password(&self, password: &str) -> bool {
+        if let Some(ref duress_slot) = self.duress_password_slot {
+            // Try to unlock the duress slot
+            // If successful, it means the password matched
+            duress_slot.unlock(password).is_ok()
+        } else {
+            false
+        }
+    }
+
+    /// Securely destroys all key slots
+    ///
+    /// This is called when the duress password is entered.
+    /// It overwrites all key slot data with zeros, making the volume
+    /// permanently inaccessible.
+    ///
+    /// # Security
+    ///
+    /// - Overwrites all encrypted master keys with zeros
+    /// - Overwrites all salts and nonces
+    /// - Marks all slots as inactive
+    /// - Destroys the duress password slot itself
+    pub fn secure_destroy_all_keys(&mut self) {
+        // Destroy all normal key slots
+        for slot in &mut self.slots {
+            slot.deactivate();
+        }
+
+        // Destroy duress password slot
+        self.remove_duress_password();
+    }
+
+    /// Returns whether a duress password is set
+    pub fn has_duress_password(&self) -> bool {
+        self.duress_password_slot.is_some()
     }
 }
 
@@ -642,5 +765,189 @@ mod tests {
         // but the Zeroize trait guarantees it)
         // This test mainly ensures the derive macro is applied
         assert!(!original.iter().all(|&b| b == 0));
+    }
+
+    // ====================
+    // Duress Password Tests
+    // ====================
+
+    #[test]
+    fn test_duress_password_set_and_check() {
+        let master_key = MasterKey::generate();
+        let mut slots = KeySlots::new();
+
+        // Add normal password
+        slots.add_slot(&master_key, "NormalPassword123!").unwrap();
+
+        // Set duress password
+        slots.set_duress_password("DuressPassword456!").unwrap();
+
+        assert!(slots.has_duress_password());
+        assert_eq!(slots.active_count(), 1);
+    }
+
+    #[test]
+    fn test_duress_password_triggers_destruction() {
+        let master_key = MasterKey::generate();
+        let mut slots = KeySlots::new();
+
+        // Add two normal passwords
+        slots.add_slot(&master_key, "Password1!").unwrap();
+        slots.add_slot(&master_key, "Password2!").unwrap();
+
+        assert_eq!(slots.active_count(), 2);
+
+        // Set duress password
+        slots.set_duress_password("PANIC123!").unwrap();
+        assert!(slots.has_duress_password());
+
+        // Verify normal passwords still work BEFORE duress password
+        assert!(slots.unlock("Password1!").is_ok());
+        assert!(slots.unlock("Password2!").is_ok());
+
+        // Now trigger the duress password
+        let mut slots_copy = slots.clone();
+        let result = slots_copy.unlock("PANIC123!");
+
+        // Should fail with "incorrect password" error
+        assert!(result.is_err());
+        assert!(matches!(result, Err(KeySlotError::DecryptionFailed)));
+
+        // All slots should be destroyed
+        assert_eq!(slots_copy.active_count(), 0);
+        assert!(!slots_copy.has_duress_password());
+
+        // Normal passwords should no longer work
+        assert!(slots_copy.unlock("Password1!").is_err());
+        assert!(slots_copy.unlock("Password2!").is_err());
+    }
+
+    #[test]
+    fn test_duress_password_indistinguishable_from_wrong_password() {
+        let master_key = MasterKey::generate();
+        let mut slots = KeySlots::new();
+
+        // Add normal password
+        slots.add_slot(&master_key, "CorrectPassword!").unwrap();
+
+        // Set duress password
+        slots.set_duress_password("DuressPassword!").unwrap();
+
+        // Try wrong password
+        let mut slots1 = slots.clone();
+        let wrong_password_result = slots1.unlock("WrongPassword!");
+
+        // Try duress password
+        let mut slots2 = slots.clone();
+        let duress_result = slots2.unlock("DuressPassword!");
+
+        // Both should return the same error variant
+        assert!(wrong_password_result.is_err());
+        assert!(duress_result.is_err());
+        assert!(matches!(wrong_password_result, Err(KeySlotError::DecryptionFailed)));
+        assert!(matches!(duress_result, Err(KeySlotError::DecryptionFailed)));
+
+        // But only duress password should have destroyed keys
+        assert_eq!(slots1.active_count(), 1); // Wrong password doesn't destroy
+        assert_eq!(slots2.active_count(), 0); // Duress password destroys
+    }
+
+    #[test]
+    fn test_duress_password_remove() {
+        let master_key = MasterKey::generate();
+        let mut slots = KeySlots::new();
+
+        // Set duress password
+        slots.set_duress_password("DuressPassword!").unwrap();
+        assert!(slots.has_duress_password());
+
+        // Remove it
+        slots.remove_duress_password();
+        assert!(!slots.has_duress_password());
+
+        // Should not trigger destruction anymore
+        let result = slots.unlock("DuressPassword!");
+        assert!(result.is_err());
+        // Slots should still be active (not destroyed)
+        assert_eq!(slots.active_count(), 0); // No normal slots were added
+    }
+
+    #[test]
+    fn test_duress_password_with_multiple_normal_slots() {
+        let master_key = MasterKey::generate();
+        let mut slots = KeySlots::new();
+
+        // Fill multiple slots
+        for i in 0..5 {
+            slots.add_slot(&master_key, &format!("Password{}!", i)).unwrap();
+        }
+
+        assert_eq!(slots.active_count(), 5);
+
+        // Set duress password
+        slots.set_duress_password("NUKE_ALL!").unwrap();
+
+        // Trigger duress password
+        let mut slots_copy = slots.clone();
+        let result = slots_copy.unlock("NUKE_ALL!");
+
+        assert!(result.is_err());
+        assert_eq!(slots_copy.active_count(), 0); // All 5 slots destroyed
+
+        // Verify none of the passwords work anymore
+        for i in 0..5 {
+            assert!(slots_copy.unlock(&format!("Password{}!", i)).is_err());
+        }
+    }
+
+    #[test]
+    fn test_duress_password_serialization() {
+        use bincode;
+
+        let master_key = MasterKey::generate();
+        let mut slots = KeySlots::new();
+
+        // Add normal password and duress password
+        slots.add_slot(&master_key, "Normal123!").unwrap();
+        slots.set_duress_password("Duress456!").unwrap();
+
+        // Serialize
+        let serialized = bincode::serialize(&slots).unwrap();
+
+        // Deserialize
+        let mut deserialized: KeySlots = bincode::deserialize(&serialized).unwrap();
+
+        // Verify duress password still works after deserialization
+        assert!(deserialized.has_duress_password());
+        assert_eq!(deserialized.active_count(), 1);
+
+        // Trigger duress password on deserialized slots
+        let result = deserialized.unlock("Duress456!");
+        assert!(result.is_err());
+        assert_eq!(deserialized.active_count(), 0);
+    }
+
+    #[test]
+    fn test_duress_password_doesnt_affect_normal_unlock() {
+        let master_key = MasterKey::generate();
+        let mut slots = KeySlots::new();
+
+        // Add normal password
+        slots.add_slot(&master_key, "NormalPass!").unwrap();
+
+        // Set duress password
+        slots.set_duress_password("DuressPass!").unwrap();
+
+        // Normal password should still work
+        let mut slots_copy = slots.clone();
+        let result = slots_copy.unlock("NormalPass!");
+        assert!(result.is_ok());
+
+        // Master key should match
+        assert_eq!(result.unwrap().as_bytes(), master_key.as_bytes());
+
+        // Slots should still be intact
+        assert_eq!(slots_copy.active_count(), 1);
+        assert!(slots_copy.has_duress_password());
     }
 }

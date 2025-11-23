@@ -436,10 +436,18 @@ impl Container {
             // Read key slots (immediately after header in V1)
             let mut keyslots_bytes = vec![0u8; KEYSLOTS_SIZE];
             file.read_exact(&mut keyslots_bytes)?;
-            let key_slots: KeySlots = bincode::deserialize(&keyslots_bytes)?;
+            let mut key_slots: KeySlots = bincode::deserialize(&keyslots_bytes)?;
 
             // Unlock with password
+            // WARNING: This may destroy all keys if duress password is entered
             let master_key = key_slots.unlock(password)?;
+
+            // If key slots were modified (duress password entered), write them back
+            // This persists the key destruction to disk
+            let keyslots_bytes = bincode::serialize(&key_slots)?;
+            file.seek(SeekFrom::Start(KEYSLOTS_OFFSET))?;
+            file.write_all(&keyslots_bytes)?;
+            file.sync_all()?;
             (master_key, None)
         };
 
@@ -632,6 +640,89 @@ impl Container {
         self.write_keyslots()?;
 
         Ok(())
+    }
+
+    /// Sets a duress password for this volume
+    ///
+    /// When this password is entered during unlock, all key slots will be
+    /// immediately and permanently destroyed, making the volume unrecoverable.
+    /// The operation returns the same error as an incorrect password, providing
+    /// plausible deniability.
+    ///
+    /// # Arguments
+    ///
+    /// * `duress_password` - The password that triggers key destruction
+    ///
+    /// # Security Considerations
+    ///
+    /// **WARNING**: Setting a duress password creates a "self-destruct" mechanism
+    /// for your volume. When triggered:
+    /// - All key slots are overwritten with zeros
+    /// - The volume becomes permanently inaccessible
+    /// - The operation appears identical to entering a wrong password
+    /// - Data recovery is mathematically impossible
+    ///
+    /// **Recommended**: Generate and securely store a recovery key BEFORE
+    /// setting a duress password, in case it is triggered accidentally.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the volume is not unlocked or if encryption fails
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use tesseract::volume::Container;
+    /// # use std::path::Path;
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut container = Container::open(Path::new("vault.enc"), "password")?;
+    /// container.set_duress_password("panic_password_123!")?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn set_duress_password(&mut self, duress_password: &str) -> Result<()> {
+        // Ensure volume is unlocked (need access to modify key slots)
+        if self.master_key.is_none() {
+            return Err(ContainerError::Other(
+                "Cannot set duress password: volume must be unlocked".to_string(),
+            ));
+        }
+
+        // Set the duress password in key slots
+        self.key_slots.set_duress_password(duress_password)?;
+
+        // Write updated key slots to disk immediately
+        // This ensures the duress password is persisted
+        self.write_keyslots()?;
+
+        Ok(())
+    }
+
+    /// Removes the duress password from this volume
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the volume is not unlocked
+    pub fn remove_duress_password(&mut self) -> Result<()> {
+        // Ensure volume is unlocked
+        if self.master_key.is_none() {
+            return Err(ContainerError::Other(
+                "Cannot remove duress password: volume must be unlocked".to_string(),
+            ));
+        }
+
+        // Remove the duress password
+        self.key_slots.remove_duress_password();
+
+        // Write updated key slots to disk
+        self.write_keyslots()?;
+
+        Ok(())
+    }
+
+    /// Returns whether this volume has a duress password set
+    pub fn has_duress_password(&self) -> bool {
+        self.key_slots.has_duress_password()
     }
 
     /// Returns the master key (if unlocked)
@@ -1162,10 +1253,17 @@ impl Container {
         // Read hidden volume key slots
         let mut keyslots_bytes = vec![0u8; KEYSLOTS_SIZE];
         file.read_exact(&mut keyslots_bytes)?;
-        let hidden_keyslots: KeySlots = bincode::deserialize(&keyslots_bytes)?;
+        let mut hidden_keyslots: KeySlots = bincode::deserialize(&keyslots_bytes)?;
 
         // Unlock with hidden password
+        // WARNING: This may destroy all keys if duress password is entered
         let hidden_master_key = hidden_keyslots.unlock(hidden_password)?;
+
+        // If key slots were modified (duress password entered), write them back
+        let keyslots_bytes = bincode::serialize(&hidden_keyslots)?;
+        file.seek(SeekFrom::Start(absolute_offset + HEADER_SIZE as u64))?;
+        file.write_all(&keyslots_bytes)?;
+        file.sync_all()?;
 
         // Create a Container instance for the hidden volume
         // Note: The hidden volume shares the same file as the outer volume

@@ -64,7 +64,8 @@
       "Bash(tee:*)",
       "Bash(cargo doc:*)",
       "Bash(target/release/tesseract.exe:*)",
-      "Bash(where:*)"
+      "Bash(where:*)",
+      "Bash(setx PATH \"%PATH%;C:\\Program Files (x86)\\WinFsp\\bin\")"
     ],
     "deny": [],
     "ask": []

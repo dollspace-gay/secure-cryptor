@@ -223,9 +223,10 @@ impl VolumeMigration {
         let v1_header = self.read_v1_header()?;
 
         // 2. Read keyslots
-        let keyslots = self.read_keyslots()?;
+        let mut keyslots = self.read_keyslots()?;
 
         // 3. Unlock to get master key
+        // WARNING: This may destroy all keys if duress password is entered
         let master_key = keyslots.unlock(password)
             .map_err(|_| MigrationError::UnlockFailed)?;
 
@@ -340,7 +341,7 @@ impl VolumeMigration {
         }
 
         // Verify keyslots still work
-        let keyslots = self.read_keyslots()?;
+        let mut keyslots = self.read_keyslots()?;
         keyslots.unlock(password)
             .map_err(|_| MigrationError::VerificationFailed(
                 "Cannot unlock volume after migration".to_string(),
