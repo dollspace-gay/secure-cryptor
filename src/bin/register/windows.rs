@@ -3,7 +3,7 @@
 
 #![cfg(windows)]
 
-use std::path::PathBuf;
+use std::path::Path;
 use winreg::enums::*;
 use winreg::RegKey;
 
@@ -11,7 +11,7 @@ const PROGID: &str = "SecureCryptor.EncryptedFile";
 const APP_NAME: &str = "Tesseract";
 
 /// Install Windows file associations and context menus
-pub fn install(gui_exe: &PathBuf) -> std::io::Result<()> {
+pub fn install(gui_exe: &Path) -> std::io::Result<()> {
     install_file_association(gui_exe)?;
     install_context_menus(gui_exe)?;
 
@@ -32,7 +32,7 @@ pub fn uninstall() -> std::io::Result<()> {
 }
 
 /// Install .enc file association
-fn install_file_association(gui_exe: &PathBuf) -> std::io::Result<()> {
+fn install_file_association(gui_exe: &Path) -> std::io::Result<()> {
     let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
 
     // Register .enc extension
@@ -82,7 +82,7 @@ fn uninstall_file_association() -> std::io::Result<()> {
 }
 
 /// Install context menu entries
-fn install_context_menus(gui_exe: &PathBuf) -> std::io::Result<()> {
+fn install_context_menus(gui_exe: &Path) -> std::io::Result<()> {
     let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
 
     // Add "Encrypt" to all files (*)

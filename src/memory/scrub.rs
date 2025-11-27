@@ -301,16 +301,6 @@ impl<T: Zeroize> ScrubGuard<T> {
         Self { value }
     }
 
-    /// Get an immutable reference to the wrapped value.
-    pub fn as_ref(&self) -> &T {
-        &self.value
-    }
-
-    /// Get a mutable reference to the wrapped value.
-    pub fn as_mut(&mut self) -> &mut T {
-        &mut self.value
-    }
-
     /// Consume the guard and return the inner value without scrubbing.
     ///
     /// # Security Warning
@@ -345,6 +335,18 @@ impl<T: Zeroize> std::ops::Deref for ScrubGuard<T> {
 
 impl<T: Zeroize> std::ops::DerefMut for ScrubGuard<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
+impl<T: Zeroize> AsRef<T> for ScrubGuard<T> {
+    fn as_ref(&self) -> &T {
+        &self.value
+    }
+}
+
+impl<T: Zeroize> AsMut<T> for ScrubGuard<T> {
+    fn as_mut(&mut self) -> &mut T {
         &mut self.value
     }
 }

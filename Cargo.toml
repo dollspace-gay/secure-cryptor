@@ -95,7 +95,7 @@ rfd = "0.15"
 tokio = { version = "1", features = ["full"] }
 dirs = "5.0"
 notify-rust = "4.11"
-tray-icon = "0.18"
+tray-icon = "0.21"
 image = "0.25"
 
 # Hardware Security Module support

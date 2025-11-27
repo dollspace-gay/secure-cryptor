@@ -66,7 +66,8 @@ const ENCRYPTED_DK_SIZE: usize = 12 + MLKEM1024_DK_SIZE + 16;
 /// - encapsulation_key: 1568 bytes
 /// - ciphertext: 1568 bytes
 /// - encrypted_decapsulation_key: 3196 bytes (nonce + encrypted DK + tag)
-/// Total: 6333 bytes
+///
+///   Total: 6333 bytes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PqVolumeMetadata {
     /// PQ algorithm used

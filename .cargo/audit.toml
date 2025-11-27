@@ -1,0 +1,32 @@
+# Cargo audit configuration for Tesseract Vault
+#
+# This configuration allows us to acknowledge certain warnings that are
+# not security-critical or cannot be fixed due to external dependencies.
+
+# Note: We acknowledge these warnings because:
+# 1. GTK3 is required by tray-icon for Linux system tray support
+# 2. These are UI-only dependencies, not used in cryptographic operations
+# 3. GTK4 migration is tracked in upstream tray-icon project
+# 4. No known security vulnerabilities, only "unmaintained" status
+# 5. The functionality still works correctly on all supported platforms
+
+[advisories]
+ignore = [
+    # GTK3 bindings are unmaintained but required for system tray on Linux
+    "RUSTSEC-2024-0412",  # gdk - GTK3 unmaintained
+    "RUSTSEC-2024-0413",  # atk - GTK3 unmaintained
+    "RUSTSEC-2024-0415",  # gtk - GTK3 unmaintained
+    "RUSTSEC-2024-0416",  # atk-sys - GTK3 unmaintained
+    "RUSTSEC-2024-0418",  # gdk-sys - GTK3 unmaintained
+    "RUSTSEC-2024-0419",  # gtk3-macros - GTK3 unmaintained
+    "RUSTSEC-2024-0420",  # gtk-sys - GTK3 unmaintained
+
+    # glib::VariantStrIter unsoundness - we don't use this type
+    "RUSTSEC-2024-0429",
+
+    # paste crate - unmaintained but functional transitive dependency
+    "RUSTSEC-2024-0436",
+
+    # proc-macro-error - unmaintained build-time only dependency
+    "RUSTSEC-2024-0370",
+]
