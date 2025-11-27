@@ -242,17 +242,23 @@ impl VolumeMigration {
         // 7. Perform encapsulation to create ciphertext
         let (ciphertext, _shared_secret) = encapsulate(pqc_keypair.encapsulation_key())?;
 
-        // 8. Create PQC metadata
-        use base64::Engine;
+        // 8. Create PQC metadata with raw byte arrays
+        let mut ek_bytes = [0u8; 1568];
+        let mut ct_bytes = [0u8; 1568];
+        let mut edk_bytes = [0u8; 3196]; // nonce (12) + encrypted DK (3168) + tag (16)
+
+        ek_bytes.copy_from_slice(pqc_keypair.encapsulation_key());
+        ct_bytes.copy_from_slice(&ciphertext);
+        edk_bytes[..encrypted_dk.len()].copy_from_slice(&encrypted_dk);
+
         let pqc_metadata = PqVolumeMetadata {
             algorithm: PqAlgorithm::MlKem1024,
-            encapsulation_key: base64::engine::general_purpose::STANDARD
-                .encode(pqc_keypair.encapsulation_key()),
-            ciphertext: base64::engine::general_purpose::STANDARD.encode(&ciphertext),
-            encrypted_decapsulation_key: base64::engine::general_purpose::STANDARD.encode(&encrypted_dk),
+            encapsulation_key: ek_bytes,
+            ciphertext: ct_bytes,
+            encrypted_decapsulation_key: edk_bytes,
         };
 
-        let pqc_metadata_bytes = pqc_metadata.to_json_bytes()?;
+        let pqc_metadata_bytes = pqc_metadata.to_bytes()?;
         let pqc_metadata_size = pqc_metadata_bytes.len() as u32;
 
         // 9. Create V2 header preserving volume settings
@@ -352,7 +358,7 @@ impl VolumeMigration {
         let mut pqc_bytes = vec![0u8; header.pq_metadata_size() as usize];
         file.read_exact(&mut pqc_bytes)?;
 
-        let _pqc_metadata = PqVolumeMetadata::from_json_bytes(&pqc_bytes)
+        let _pqc_metadata = PqVolumeMetadata::from_bytes(&pqc_bytes)
             .map_err(|e| MigrationError::VerificationFailed(format!(
                 "Invalid PQC metadata: {}", e
             )))?;

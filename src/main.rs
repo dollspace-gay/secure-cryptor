@@ -169,6 +169,18 @@ enum VolumeCommands {
         #[arg(short, long)]
         keypair_output: Option<PathBuf>,
     },
+    /// Set a duress password that destroys all keys when entered
+    SetDuressPassword {
+        /// Path to the volume container
+        #[arg(short, long)]
+        container: PathBuf,
+    },
+    /// Remove the duress password from a volume
+    RemoveDuressPassword {
+        /// Path to the volume container
+        #[arg(short, long)]
+        container: PathBuf,
+    },
 }
 
 /// Daemon subcommands
@@ -443,6 +455,7 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             );
             println!("  Sector Size: {} bytes", cont.sector_size());
             println!("  Active Key Slots: {}", cont.key_slots().active_count());
+            println!("  Duress Password: {}", if cont.has_duress_password() { "Set" } else { "Not set" });
             println!("  Unlocked: {}", if cont.is_unlocked() { "Yes" } else { "No" });
         }
         VolumeCommands::ChangePassword { container, slot } => {
@@ -777,6 +790,99 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
                 println!("  - Keep the backup file until you verify the migration worked");
                 println!("  - Test mounting the volume before deleting the backup");
             }
+        }
+        VolumeCommands::SetDuressPassword { container } => {
+            println!("Setting duress password for '{}'", container.display());
+            println!();
+            println!("⚠️  WARNING: A duress password is a self-destruct mechanism.");
+            println!("   When the duress password is entered during unlock:");
+            println!("   - ALL key slots will be permanently destroyed");
+            println!("   - The volume will become PERMANENTLY inaccessible");
+            println!("   - Data recovery will be IMPOSSIBLE");
+            println!("   - The error will appear identical to a wrong password");
+            println!();
+            println!("RECOMMENDED: Generate and store a recovery key BEFORE setting a duress password.");
+            println!();
+
+            // Get container password first
+            print!("Enter container password: ");
+            std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            let password = validation::get_password()?;
+
+            // Open container
+            let mut cont = Container::open(&container, &password)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+
+            // Check if duress password already set
+            if cont.has_duress_password() {
+                println!("Note: A duress password is already set. This will replace it.");
+            }
+
+            // Get duress password with confirmation
+            println!();
+            print!("Enter duress password: ");
+            std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            let duress_password = validation::get_password()?;
+
+            print!("Confirm duress password: ");
+            std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            let duress_confirm = validation::get_password()?;
+
+            if duress_password != duress_confirm {
+                return Err(CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Duress passwords do not match")
+                ));
+            }
+
+            // Ensure duress password is different from container password
+            if duress_password == password {
+                return Err(CryptorError::Io(
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "Duress password must be different from the container password"
+                    )
+                ));
+            }
+
+            // Set duress password
+            cont.set_duress_password(&duress_password)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+
+            println!();
+            println!("✓ Duress password set successfully.");
+            println!();
+            println!("REMEMBER: If this password is ever entered, all keys will be destroyed.");
+            println!("          The volume will become permanently inaccessible.");
+        }
+        VolumeCommands::RemoveDuressPassword { container } => {
+            println!("Removing duress password from '{}'", container.display());
+
+            // Get container password
+            let password = validation::get_password()?;
+
+            // Open container
+            let mut cont = Container::open(&container, &password)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+
+            // Check if duress password is set
+            if !cont.has_duress_password() {
+                println!("Note: No duress password is currently set on this volume.");
+                return Ok(());
+            }
+
+            // Remove duress password
+            cont.remove_duress_password()
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+
+            println!("✓ Duress password removed successfully.");
         }
     }
 

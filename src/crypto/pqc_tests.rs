@@ -278,17 +278,26 @@ mod volume_pqc_tests {
     fn test_pqc_volume_header_creation() {
         let keypair = MlKemKeyPair::generate();
         use crate::crypto::pqc::encapsulate;
+        use crate::volume::header::PQ_METADATA_SIZE;
         let (ciphertext, _) = encapsulate(keypair.encapsulation_key()).unwrap();
 
-        use base64::Engine;
+        // Create PQ metadata with raw byte arrays
+        let mut ek_bytes = [0u8; 1568];
+        let mut ct_bytes = [0u8; 1568];
+        let edk_bytes = [0u8; 3196];
+
+        ek_bytes.copy_from_slice(keypair.encapsulation_key());
+        ct_bytes.copy_from_slice(&ciphertext);
+
         let pq_metadata = PqVolumeMetadata {
             algorithm: PqAlgorithm::MlKem1024,
-            encapsulation_key: base64::engine::general_purpose::STANDARD.encode(keypair.encapsulation_key()),
-            ciphertext: base64::engine::general_purpose::STANDARD.encode(&ciphertext),
-            encrypted_decapsulation_key: "test".to_string(),
+            encapsulation_key: ek_bytes,
+            ciphertext: ct_bytes,
+            encrypted_decapsulation_key: edk_bytes,
         };
 
-        let pq_size = pq_metadata.to_json_bytes().unwrap().len() as u32;
+        let pq_size = pq_metadata.to_bytes().unwrap().len() as u32;
+        assert_eq!(pq_size, PQ_METADATA_SIZE as u32);
 
         let header = VolumeHeader::new_with_pqc(
             1024 * 1024,
@@ -307,17 +316,26 @@ mod volume_pqc_tests {
     fn test_pqc_volume_header_serialization() {
         let keypair = MlKemKeyPair::generate();
         use crate::crypto::pqc::encapsulate;
+        use crate::volume::header::PQ_METADATA_SIZE;
         let (ciphertext, _) = encapsulate(keypair.encapsulation_key()).unwrap();
 
-        use base64::Engine;
+        // Create PQ metadata with raw byte arrays
+        let mut ek_bytes = [0u8; 1568];
+        let mut ct_bytes = [0u8; 1568];
+        let edk_bytes = [0u8; 3196];
+
+        ek_bytes.copy_from_slice(keypair.encapsulation_key());
+        ct_bytes.copy_from_slice(&ciphertext);
+
         let pq_metadata = PqVolumeMetadata {
             algorithm: PqAlgorithm::MlKem1024,
-            encapsulation_key: base64::engine::general_purpose::STANDARD.encode(keypair.encapsulation_key()),
-            ciphertext: base64::engine::general_purpose::STANDARD.encode(&ciphertext),
-            encrypted_decapsulation_key: "test".to_string(),
+            encapsulation_key: ek_bytes,
+            ciphertext: ct_bytes,
+            encrypted_decapsulation_key: edk_bytes,
         };
 
-        let pq_size = pq_metadata.to_json_bytes().unwrap().len() as u32;
+        let pq_size = pq_metadata.to_bytes().unwrap().len() as u32;
+        assert_eq!(pq_size, PQ_METADATA_SIZE as u32);
 
         let header = VolumeHeader::new_with_pqc(
             2048 * 1024,
@@ -341,16 +359,27 @@ mod volume_pqc_tests {
         use crate::crypto::pqc::encapsulate;
         let (ciphertext, _) = encapsulate(keypair.encapsulation_key()).unwrap();
 
-        use base64::Engine;
+        // Create PQ metadata with raw byte arrays
+        let mut ek_bytes = [0u8; 1568];
+        let mut ct_bytes = [0u8; 1568];
+        let mut edk_bytes = [0u8; 3196];
+
+        ek_bytes.copy_from_slice(keypair.encapsulation_key());
+        ct_bytes.copy_from_slice(&ciphertext);
+        // Fill edk with test pattern
+        for (i, b) in edk_bytes.iter_mut().enumerate() {
+            *b = (i % 256) as u8;
+        }
+
         let metadata = PqVolumeMetadata {
             algorithm: PqAlgorithm::MlKem1024,
-            encapsulation_key: base64::engine::general_purpose::STANDARD.encode(keypair.encapsulation_key()),
-            ciphertext: base64::engine::general_purpose::STANDARD.encode(&ciphertext),
-            encrypted_decapsulation_key: base64::engine::general_purpose::STANDARD.encode(b"encrypted_dk"),
+            encapsulation_key: ek_bytes,
+            ciphertext: ct_bytes,
+            encrypted_decapsulation_key: edk_bytes,
         };
 
-        let bytes = metadata.to_json_bytes().unwrap();
-        let deserialized = PqVolumeMetadata::from_json_bytes(&bytes).unwrap();
+        let bytes = metadata.to_bytes().unwrap();
+        let deserialized = PqVolumeMetadata::from_bytes(&bytes).unwrap();
 
         assert_eq!(deserialized.algorithm, metadata.algorithm);
         assert_eq!(deserialized.encapsulation_key, metadata.encapsulation_key);

@@ -107,16 +107,25 @@ pub const PRIMARY_HEADER_OFFSET: u64 = 0;
 /// Calculation: volume_file_size - HEADER_SIZE
 /// This follows the LUKS/VeraCrypt convention of end-of-volume backup headers.
 
+/// Offset to PQ metadata section (for V2 volumes with post-quantum cryptography)
+/// Located after the primary header at 4KB offset
+/// Size: 8KB reserved (actual data ~6.3KB for ML-KEM-1024)
+pub const PQ_METADATA_OFFSET: u64 = HEADER_SIZE as u64; // 4KB
+
+/// Reserved size for PQ metadata section (8KB aligned)
+pub const PQ_METADATA_RESERVED: usize = 2 * HEADER_SIZE; // 8KB
+
 /// Offset to key slots section
-pub const KEYSLOTS_OFFSET: u64 = 2 * HEADER_SIZE as u64; // 8KB
+/// V2 layout: Header (4KB) + PQ Metadata (8KB) + Key Slots (8KB) = 20KB
+pub const KEYSLOTS_OFFSET: u64 = (HEADER_SIZE + PQ_METADATA_RESERVED) as u64; // 12KB
 
 /// Size of the key slots section in bytes (8KB for 8 slots)
 pub const KEYSLOTS_SIZE: usize = 8192;
 
 /// Offset to encrypted data area (after all metadata)
-pub const DATA_AREA_OFFSET: u64 = KEYSLOTS_OFFSET + KEYSLOTS_SIZE as u64; // 16KB
+pub const DATA_AREA_OFFSET: u64 = KEYSLOTS_OFFSET + KEYSLOTS_SIZE as u64; // 20KB
 
-/// Total size of container metadata (headers + key slots)
+/// Total size of container metadata (headers + PQ metadata + key slots)
 pub const METADATA_SIZE: usize = DATA_AREA_OFFSET as usize;
 
 /// Errors that can occur with encrypted containers
@@ -250,6 +259,10 @@ impl Container {
         let password_key = Zeroizing::new(kdf.derive_key(password.as_bytes(), &salt)
             .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?);
 
+        #[cfg(test)]
+        eprintln!("DEBUG CREATE: salt first 4: {:?}, password_key first 4: {:?}",
+            &salt[..4], &password_key[..4]);
+
         // Encrypt ML-KEM decapsulation key with password key
         let encryptor = AesGcmEncryptor::new();
         let mut nonce = [0u8; 12];
@@ -264,17 +277,33 @@ impl Container {
         encrypted_dk_with_nonce.extend_from_slice(&nonce);
         encrypted_dk_with_nonce.extend_from_slice(&encrypted_dk);
 
-        // Create PQ metadata
-        use base64::Engine;
+        // Create PQ metadata with raw byte arrays
+        let mut ek_bytes = [0u8; 1568];
+        let mut ct_bytes = [0u8; 1568];
+        let mut edk_bytes = [0u8; 3196]; // nonce (12) + encrypted DK (3168) + tag (16)
+
+        ek_bytes.copy_from_slice(keypair.encapsulation_key());
+        ct_bytes.copy_from_slice(&ciphertext);
+
+        // Verify sizes match exactly
+        debug_assert_eq!(encrypted_dk_with_nonce.len(), 3196,
+            "encrypted_dk_with_nonce should be exactly 3196 bytes: nonce(12) + ciphertext(3168+16)");
+
+        #[cfg(test)]
+        eprintln!("DEBUG WRITE: nonce: {:?}, edk_with_nonce len: {}, edk first 4: {:?}",
+            &nonce[..4], encrypted_dk_with_nonce.len(), &encrypted_dk[..4]);
+
+        edk_bytes.copy_from_slice(&encrypted_dk_with_nonce);
+
         let pq_metadata = PqVolumeMetadata {
             algorithm: super::header::PqAlgorithm::MlKem1024,
-            encapsulation_key: base64::engine::general_purpose::STANDARD.encode(keypair.encapsulation_key()),
-            ciphertext: base64::engine::general_purpose::STANDARD.encode(&ciphertext),
-            encrypted_decapsulation_key: base64::engine::general_purpose::STANDARD.encode(&encrypted_dk_with_nonce),
+            encapsulation_key: ek_bytes,
+            ciphertext: ct_bytes,
+            encrypted_decapsulation_key: edk_bytes,
         };
 
         // Serialize PQ metadata to get size
-        let pq_metadata_bytes = pq_metadata.to_json_bytes()?;
+        let pq_metadata_bytes = pq_metadata.to_bytes()?;
         let pq_metadata_size = pq_metadata_bytes.len() as u32;
 
         // Derive hybrid key: password_key + pq_shared_secret
@@ -303,10 +332,14 @@ impl Container {
         // Write header
         header.write_to(&mut file)?;
 
-        // Write PQ metadata immediately after header
-        pq_metadata.write_to(&mut file)?;
+        // Write PQ metadata at PQ_METADATA_OFFSET (immediately after header)
+        // Then pad to align key slots at KEYSLOTS_OFFSET
+        let pq_bytes = pq_metadata.to_bytes()?;
+        let mut pq_section = pq_bytes;
+        pq_section.resize(PQ_METADATA_RESERVED, 0); // Pad to 8KB
+        file.write_all(&pq_section)?;
 
-        // Key slots written immediately after PQ metadata (no padding needed)
+        // Key slots written at KEYSLOTS_OFFSET (12KB)
         // Serialize and write key slots
         let keyslots_bytes = bincode::serialize(&key_slots)?;
         if keyslots_bytes.len() > KEYSLOTS_SIZE {
@@ -393,34 +426,39 @@ impl Container {
             let password_key = Zeroizing::new(kdf.derive_key(password.as_bytes(), header.salt())
                 .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?);
 
+            #[cfg(test)]
+            eprintln!("DEBUG READ: salt first 4: {:?}, password_key first 4: {:?}",
+                &header.salt()[..4], &password_key[..4]);
+
             // Decrypt ML-KEM decapsulation key with password key
-            use base64::Engine;
-            let encrypted_dk = base64::engine::general_purpose::STANDARD.decode(&pq_metadata.encrypted_decapsulation_key)
-                .map_err(|e| ContainerError::Other(format!("Base64 decode failed: {}", e)))?;
+            // encrypted_decapsulation_key format: nonce (12 bytes) + encrypted_dk (3168) + auth tag (16)
+            let encrypted_dk = &pq_metadata.encrypted_decapsulation_key;
 
             let encryptor = AesGcmEncryptor::new();
             // Extract nonce from encrypted data (first 12 bytes)
-            if encrypted_dk.len() < 12 {
-                return Err(ContainerError::Other("Invalid encrypted DK size".to_string()));
-            }
             let nonce = &encrypted_dk[0..12];
+            // ciphertext = encrypted_dk (3168) + tag (16) = 3184 bytes
             let ciphertext = &encrypted_dk[12..];
+
+            #[cfg(test)]
+            eprintln!("DEBUG: encrypted_dk total len: {}, nonce: {:?}, ciphertext len: {}",
+                encrypted_dk.len(), &nonce[..4], ciphertext.len());
 
             let dk_bytes = encryptor.decrypt(&password_key, nonce, ciphertext)
                 .map_err(|_| ContainerError::KeySlot(super::keyslot::KeySlotError::DecryptionFailed))?;
 
-            // Decapsulate to get PQ shared secret
-            let ciphertext_bytes = base64::engine::general_purpose::STANDARD.decode(&pq_metadata.ciphertext)
-                .map_err(|e| ContainerError::Other(format!("Base64 decode failed: {}", e)))?;
+            // Decapsulate to get PQ shared secret using raw ciphertext bytes
+            let ciphertext_bytes = &pq_metadata.ciphertext;
 
-            let pq_shared_secret = crate::crypto::pqc::decapsulate(&dk_bytes, &ciphertext_bytes)
+            let pq_shared_secret = crate::crypto::pqc::decapsulate(&dk_bytes, ciphertext_bytes)
                 .map_err(|e| ContainerError::Other(format!("ML-KEM decapsulation failed: {}", e)))?;
 
             // Derive hybrid key
             let hybrid_key = derive_hybrid_key(&password_key, &pq_shared_secret);
 
-            // Seek to key slots position (after PQ metadata)
-            file.seek(SeekFrom::Start(header.pq_metadata_offset() + header.pq_metadata_size() as u64))?;
+            // Seek to key slots position (fixed offset in V2 layout)
+            // Key slots are always at KEYSLOTS_OFFSET (12KB), NOT after PQ metadata data
+            file.seek(SeekFrom::Start(KEYSLOTS_OFFSET))?;
 
             // Read key slots
             let mut keyslots_bytes = vec![0u8; KEYSLOTS_SIZE];
@@ -1044,9 +1082,9 @@ impl Container {
             )));
         }
 
-        // Calculate new total size using actual metadata size (V1 or V2)
-        let metadata_size = self.metadata_size();
-        let new_total_size = metadata_size + new_size;
+        // Calculate new total size including backup header
+        // File layout: front metadata (20KB) + data + backup header (4KB)
+        let new_total_size = self.metadata_size() + new_size + HEADER_SIZE as u64;
 
         // Get file handle
         let file = self.file.as_mut()
@@ -1089,14 +1127,16 @@ impl Container {
         self.header.volume_size()
     }
 
-    /// Returns the actual metadata size (primary + backup headers + keyslots = 16KB)
+    /// Returns the front metadata size in bytes (header + PQ metadata + keyslots = 20KB)
     pub fn metadata_size(&self) -> u64 {
         METADATA_SIZE as u64
     }
 
-    /// Returns the total file size in bytes (including metadata)
+    /// Returns the total file size in bytes (including all metadata and backup header)
+    ///
+    /// File layout: front metadata (20KB) + data + backup header (4KB)
     pub fn total_size(&self) -> u64 {
-        self.metadata_size() + self.header.volume_size()
+        self.metadata_size() + self.header.volume_size() + HEADER_SIZE as u64
     }
 
     /// Creates a hidden volume within this container
@@ -1861,9 +1901,10 @@ mod tests {
         ).unwrap();
 
         // Verify initial size
-        let metadata_size = container.metadata_size();
         assert_eq!(container.size(), initial_size);
-        assert_eq!(container.total_size(), metadata_size + initial_size);
+        // total_size = front metadata (20KB) + data + backup header (4KB)
+        let expected_total = container.metadata_size() + initial_size + HEADER_SIZE as u64;
+        assert_eq!(container.total_size(), expected_total);
 
         // Expand to 2 MB
         let new_size = 2 * 1024 * 1024;
@@ -1871,11 +1912,12 @@ mod tests {
 
         // Verify new size (metadata size unchanged after resize)
         assert_eq!(container.size(), new_size);
-        assert_eq!(container.total_size(), metadata_size + new_size);
+        let expected_new_total = container.metadata_size() + new_size + HEADER_SIZE as u64;
+        assert_eq!(container.total_size(), expected_new_total);
 
         // Verify file size on disk
         let fs_metadata = fs::metadata(&path).unwrap();
-        assert_eq!(fs_metadata.len(), metadata_size + new_size);
+        assert_eq!(fs_metadata.len(), expected_new_total);
 
         // Close and reopen to verify persistence
         drop(container);
@@ -1899,16 +1941,16 @@ mod tests {
         ).unwrap();
 
         // Shrink to 1 MB
-        let metadata_size = container.metadata_size();
         let new_size = 1024 * 1024;
         container.resize(new_size).unwrap();
 
         // Verify new size
         assert_eq!(container.size(), new_size);
 
-        // Verify file size on disk
+        // Verify file size on disk (includes backup header)
         let fs_metadata = fs::metadata(&path).unwrap();
-        assert_eq!(fs_metadata.len(), metadata_size + new_size);
+        let expected_total = container.metadata_size() + new_size + HEADER_SIZE as u64;
+        assert_eq!(fs_metadata.len(), expected_total);
 
         // Close and reopen to verify persistence
         drop(container);
@@ -1973,7 +2015,9 @@ mod tests {
         ).unwrap();
 
         assert_eq!(container.size(), data_size);
-        assert_eq!(container.total_size(), container.metadata_size() + data_size);
+        // total_size = front metadata (20KB) + data + backup header (4KB)
+        let expected_total = container.metadata_size() + data_size + HEADER_SIZE as u64;
+        assert_eq!(container.total_size(), expected_total);
 
         cleanup(&path);
     }

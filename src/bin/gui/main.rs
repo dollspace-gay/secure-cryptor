@@ -185,6 +185,8 @@ enum VolumeTab {
     Info,
     #[allow(dead_code)]
     Password,
+    #[allow(dead_code)]
+    Security,
 }
 
 #[derive(Clone)]
@@ -261,6 +263,15 @@ struct CryptorApp {
     mounted_volumes: Vec<tesseract::volume::MountedVolumeInfo>,
     #[allow(dead_code)]
     volume_info: Option<String>,
+    // Duress password fields
+    #[allow(dead_code)]
+    duress_password: String,
+    #[allow(dead_code)]
+    duress_password_confirm: String,
+    #[allow(dead_code)]
+    duress_status: String,
+    #[allow(dead_code)]
+    has_duress_password: bool,
 }
 
 impl Default for CryptorApp {
@@ -317,6 +328,11 @@ impl CryptorApp {
             volume_status: String::new(),
             mounted_volumes: Vec::new(),
             volume_info: None,
+            // Duress password fields
+            duress_password: String::new(),
+            duress_password_confirm: String::new(),
+            duress_status: String::new(),
+            has_duress_password: false,
         };
 
         // If initial file is provided, set it up
@@ -907,6 +923,12 @@ impl CryptorApp {
                     egui::Color32::from_rgb(200, 200, 200)
                 };
 
+                let security_color = if self.volume_tab == VolumeTab::Security {
+                    egui::Color32::from_rgb(91, 206, 250)
+                } else {
+                    egui::Color32::from_rgb(200, 200, 200)
+                };
+
                 if ui.add(egui::Button::new(egui::RichText::new("📦 Create").size(14.0).color(egui::Color32::WHITE))
                     .fill(create_color)
                     .min_size(egui::vec2(120.0, 40.0))
@@ -939,6 +961,15 @@ impl CryptorApp {
                     .min_size(egui::vec2(120.0, 40.0))
                     .rounding(egui::Rounding::same(20.0))).clicked() {
                     self.volume_tab = VolumeTab::Password;
+                }
+
+                ui.add_space(10.0);
+
+                if ui.add(egui::Button::new(egui::RichText::new("🛡️ Security").size(14.0).color(egui::Color32::WHITE))
+                    .fill(security_color)
+                    .min_size(egui::vec2(120.0, 40.0))
+                    .rounding(egui::Rounding::same(20.0))).clicked() {
+                    self.volume_tab = VolumeTab::Security;
                 }
             });
         });
@@ -1387,6 +1418,184 @@ impl CryptorApp {
                     ui.add_space(20.0);
                     ui.vertical_centered(|ui| {
                         ui.label(egui::RichText::new(&self.volume_status).size(13.0));
+                    });
+                }
+            }
+            VolumeTab::Security => {
+                ui.vertical_centered(|ui| {
+                    ui.label(egui::RichText::new("Security Settings").size(18.0));
+                });
+                ui.add_space(20.0);
+
+                // Warning box
+                egui::Frame::none()
+                    .fill(egui::Color32::from_rgb(80, 30, 30))
+                    .rounding(egui::Rounding::same(10.0))
+                    .inner_margin(egui::Margin::same(15.0))
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new("⚠️ DURESS PASSWORD WARNING").size(16.0).color(egui::Color32::from_rgb(255, 200, 200)));
+                        ui.add_space(10.0);
+                        ui.label(egui::RichText::new(
+                            "A duress password is a self-destruct mechanism. When entered during unlock:\n\
+                            • ALL key slots will be permanently destroyed\n\
+                            • The volume will become PERMANENTLY inaccessible\n\
+                            • Data recovery will be IMPOSSIBLE\n\
+                            • The error will appear identical to a wrong password"
+                        ).size(12.0).color(egui::Color32::from_rgb(255, 200, 200)));
+                    });
+
+                ui.add_space(20.0);
+
+                // Container path
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Container Path").size(14.0));
+                    ui.add_space(10.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_container_path)
+                        .desired_width(450.0));
+                    ui.add_space(10.0);
+                    if ui.button("Browse...").clicked() {
+                        if let Some(path) = rfd::FileDialog::new().pick_file() {
+                            self.volume_container_path = path.display().to_string();
+                            // Check if volume has duress password
+                            self.has_duress_password = false;
+                            self.duress_status.clear();
+                        }
+                    }
+                });
+
+                ui.add_space(15.0);
+
+                // Container password to unlock
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Container Password").size(14.0));
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_password)
+                        .password(true)
+                        .desired_width(450.0));
+                });
+
+                ui.add_space(15.0);
+
+                // Duress password
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Duress Password").size(14.0));
+                    ui.add_space(18.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.duress_password)
+                        .password(true)
+                        .desired_width(450.0));
+                });
+
+                ui.add_space(15.0);
+
+                // Confirm duress password
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Confirm Duress").size(14.0));
+                    ui.add_space(27.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.duress_password_confirm)
+                        .password(true)
+                        .desired_width(450.0));
+                });
+
+                ui.add_space(30.0);
+
+                // Buttons
+                ui.horizontal(|ui| {
+                    ui.add_space(100.0);
+
+                    // Set duress password button
+                    let can_set = !self.volume_container_path.is_empty()
+                        && !self.volume_password.is_empty()
+                        && !self.duress_password.is_empty()
+                        && self.duress_password == self.duress_password_confirm
+                        && self.duress_password != self.volume_password;
+
+                    if ui.add_enabled(can_set, egui::Button::new(
+                        egui::RichText::new("🛡️ Set Duress Password").size(14.0).color(egui::Color32::WHITE))
+                        .fill(egui::Color32::from_rgb(180, 50, 50))
+                        .min_size(egui::vec2(200.0, 45.0))
+                        .rounding(egui::Rounding::same(20.0))).clicked() {
+
+                        match Container::open(
+                            std::path::Path::new(&self.volume_container_path),
+                            &self.volume_password,
+                        ) {
+                            Ok(mut container) => {
+                                match container.set_duress_password(&self.duress_password) {
+                                    Ok(()) => {
+                                        self.duress_status = "✓ Duress password set successfully".to_string();
+                                        self.has_duress_password = true;
+                                        self.duress_password.clear();
+                                        self.duress_password_confirm.clear();
+                                    }
+                                    Err(e) => {
+                                        self.duress_status = format!("✗ Error: {}", e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                self.duress_status = format!("✗ Error opening container: {}", e);
+                            }
+                        }
+                    }
+
+                    ui.add_space(20.0);
+
+                    // Remove duress password button
+                    let can_remove = !self.volume_container_path.is_empty()
+                        && !self.volume_password.is_empty();
+
+                    if ui.add_enabled(can_remove, egui::Button::new(
+                        egui::RichText::new("🗑️ Remove Duress Password").size(14.0).color(egui::Color32::WHITE))
+                        .fill(egui::Color32::from_rgb(100, 100, 100))
+                        .min_size(egui::vec2(220.0, 45.0))
+                        .rounding(egui::Rounding::same(20.0))).clicked() {
+
+                        match Container::open(
+                            std::path::Path::new(&self.volume_container_path),
+                            &self.volume_password,
+                        ) {
+                            Ok(mut container) => {
+                                if !container.has_duress_password() {
+                                    self.duress_status = "Note: No duress password is currently set".to_string();
+                                } else {
+                                    match container.remove_duress_password() {
+                                        Ok(()) => {
+                                            self.duress_status = "✓ Duress password removed".to_string();
+                                            self.has_duress_password = false;
+                                        }
+                                        Err(e) => {
+                                            self.duress_status = format!("✗ Error: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                self.duress_status = format!("✗ Error opening container: {}", e);
+                            }
+                        }
+                    }
+                });
+
+                // Validation messages
+                ui.add_space(15.0);
+                if !self.duress_password.is_empty() && !self.duress_password_confirm.is_empty()
+                    && self.duress_password != self.duress_password_confirm {
+                    ui.vertical_centered(|ui| {
+                        ui.label(egui::RichText::new("⚠️ Duress passwords do not match").size(12.0).color(egui::Color32::from_rgb(255, 150, 150)));
+                    });
+                }
+
+                if !self.duress_password.is_empty() && !self.volume_password.is_empty()
+                    && self.duress_password == self.volume_password {
+                    ui.vertical_centered(|ui| {
+                        ui.label(egui::RichText::new("⚠️ Duress password must be different from container password").size(12.0).color(egui::Color32::from_rgb(255, 150, 150)));
+                    });
+                }
+
+                // Status message
+                if !self.duress_status.is_empty() {
+                    ui.add_space(20.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label(egui::RichText::new(&self.duress_status).size(13.0));
                     });
                 }
             }

@@ -42,22 +42,42 @@ pub enum PqAlgorithm {
     MlKem1024 = 1,
 }
 
+/// ML-KEM-1024 key sizes (FIPS 203)
+/// Encapsulation key (public key): 1568 bytes
+/// Decapsulation key (private key): 3168 bytes
+/// Ciphertext: 1568 bytes
+const MLKEM1024_EK_SIZE: usize = 1568;
+const MLKEM1024_CT_SIZE: usize = 1568;
+const MLKEM1024_DK_SIZE: usize = 3168;
+/// Encrypted DK size: nonce (12) + DK (3168) + auth tag (16) = 3196
+const ENCRYPTED_DK_SIZE: usize = 12 + MLKEM1024_DK_SIZE + 16;
+
 /// Post-quantum cryptography metadata for volume encryption
 ///
-/// This structure is serialized to JSON and stored after the main header.
+/// This structure is serialized with bincode and stored after the main header.
 /// It contains ML-KEM-1024 key encapsulation data for quantum-resistant
 /// volume encryption.
+///
+/// Binary layout (fixed size for ML-KEM-1024):
+/// - algorithm: 1 byte
+/// - encapsulation_key: 1568 bytes
+/// - ciphertext: 1568 bytes
+/// - encrypted_decapsulation_key: 3196 bytes (nonce + encrypted DK + tag)
+/// Total: 6333 bytes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PqVolumeMetadata {
     /// PQ algorithm used
     pub algorithm: PqAlgorithm,
-    /// ML-KEM encapsulation key (public key) - base64 encoded
-    pub encapsulation_key: String,
-    /// ML-KEM ciphertext from encapsulation - base64 encoded
-    pub ciphertext: String,
-    /// Encrypted decapsulation key (private key) - base64 encoded
-    /// Format: nonce (12 bytes) + encrypted_key + auth tag
-    pub encrypted_decapsulation_key: String,
+    /// ML-KEM encapsulation key (public key) - 1568 bytes for ML-KEM-1024
+    #[serde(with = "BigArray")]
+    pub encapsulation_key: [u8; MLKEM1024_EK_SIZE],
+    /// ML-KEM ciphertext from encapsulation - 1568 bytes for ML-KEM-1024
+    #[serde(with = "BigArray")]
+    pub ciphertext: [u8; MLKEM1024_CT_SIZE],
+    /// Encrypted decapsulation key (private key)
+    /// Format: nonce (12 bytes) + encrypted_key (3168 bytes) + auth tag (16 bytes)
+    #[serde(with = "BigArray")]
+    pub encrypted_decapsulation_key: [u8; ENCRYPTED_DK_SIZE],
 }
 
 /// Volume header containing all metadata
@@ -481,29 +501,32 @@ impl VolumeHeader {
     }
 }
 
+/// Expected serialized size of PqVolumeMetadata with bincode
+/// bincode adds 8 bytes per array (length prefix as u64) for 3 arrays = 24 bytes overhead
+/// But actually bincode with serde_big_array uses fixed arrays, so just 1 byte for enum + arrays
+/// Actual measurement: 6336 bytes (includes bincode overhead)
+pub const PQ_METADATA_SIZE: usize = 6336;
+
 /// Helper functions for PQ metadata I/O
 impl PqVolumeMetadata {
-    /// Serializes PQ metadata to JSON bytes
+    /// Serializes PQ metadata to binary bytes using bincode
     ///
     /// # Returns
     ///
-    /// JSON-encoded byte vector
+    /// Bincode-encoded byte vector (fixed size: 6333 bytes)
     ///
     /// # Errors
     ///
     /// Returns an error if serialization fails
-    pub fn to_json_bytes(&self) -> Result<Vec<u8>, HeaderError> {
-        serde_json::to_vec(self)
-            .map_err(|e| HeaderError::Serialization(bincode::Error::from(std::io::Error::other(
-                e.to_string()
-            ))))
+    pub fn to_bytes(&self) -> Result<Vec<u8>, HeaderError> {
+        bincode::serialize(self).map_err(HeaderError::Serialization)
     }
 
-    /// Deserializes PQ metadata from JSON bytes
+    /// Deserializes PQ metadata from binary bytes
     ///
     /// # Arguments
     ///
-    /// * `bytes` - JSON-encoded byte slice
+    /// * `bytes` - Bincode-encoded byte slice
     ///
     /// # Returns
     ///
@@ -512,11 +535,8 @@ impl PqVolumeMetadata {
     /// # Errors
     ///
     /// Returns an error if deserialization fails
-    pub fn from_json_bytes(bytes: &[u8]) -> Result<Self, HeaderError> {
-        serde_json::from_slice(bytes)
-            .map_err(|e| HeaderError::Serialization(bincode::Error::from(std::io::Error::other(
-                e.to_string()
-            ))))
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, HeaderError> {
+        bincode::deserialize(bytes).map_err(HeaderError::Serialization)
     }
 
     /// Writes PQ metadata to a writer
@@ -529,7 +549,7 @@ impl PqVolumeMetadata {
     ///
     /// Returns an error if serialization or writing fails
     pub fn write_to<W: Write>(&self, writer: &mut W) -> Result<(), HeaderError> {
-        let bytes = self.to_json_bytes()?;
+        let bytes = self.to_bytes()?;
         writer.write_all(&bytes)?;
         Ok(())
     }
@@ -551,7 +571,12 @@ impl PqVolumeMetadata {
     pub fn read_from<R: Read>(reader: &mut R, size: u32) -> Result<Self, HeaderError> {
         let mut bytes = vec![0u8; size as usize];
         reader.read_exact(&mut bytes)?;
-        Self::from_json_bytes(&bytes)
+        Self::from_bytes(&bytes)
+    }
+
+    /// Returns the expected serialized size in bytes
+    pub const fn serialized_size() -> usize {
+        PQ_METADATA_SIZE
     }
 }
 
@@ -666,29 +691,57 @@ mod tests {
 
     #[test]
     fn test_pq_metadata_serialization() {
+        let mut ek = [0u8; MLKEM1024_EK_SIZE];
+        let mut ct = [0u8; MLKEM1024_CT_SIZE];
+        let mut edk = [0u8; ENCRYPTED_DK_SIZE];
+
+        // Fill with test patterns
+        ek[0] = 0xEE;
+        ek[1567] = 0xEE;
+        ct[0] = 0xCC;
+        ct[1567] = 0xCC;
+        edk[0] = 0xDD;
+        edk[ENCRYPTED_DK_SIZE - 1] = 0xDD;
+
         let metadata = PqVolumeMetadata {
             algorithm: PqAlgorithm::MlKem1024,
-            encapsulation_key: "test_ek".to_string(),
-            ciphertext: "test_ct".to_string(),
-            encrypted_decapsulation_key: "test_edk".to_string(),
+            encapsulation_key: ek,
+            ciphertext: ct,
+            encrypted_decapsulation_key: edk,
         };
 
-        let bytes = metadata.to_json_bytes().unwrap();
-        let deserialized = PqVolumeMetadata::from_json_bytes(&bytes).unwrap();
+        let bytes = metadata.to_bytes().unwrap();
+        assert_eq!(bytes.len(), PQ_METADATA_SIZE);
+
+        let deserialized = PqVolumeMetadata::from_bytes(&bytes).unwrap();
 
         assert_eq!(deserialized.algorithm, PqAlgorithm::MlKem1024);
-        assert_eq!(deserialized.encapsulation_key, "test_ek");
-        assert_eq!(deserialized.ciphertext, "test_ct");
-        assert_eq!(deserialized.encrypted_decapsulation_key, "test_edk");
+        assert_eq!(deserialized.encapsulation_key[0], 0xEE);
+        assert_eq!(deserialized.encapsulation_key[1567], 0xEE);
+        assert_eq!(deserialized.ciphertext[0], 0xCC);
+        assert_eq!(deserialized.ciphertext[1567], 0xCC);
+        assert_eq!(deserialized.encrypted_decapsulation_key[0], 0xDD);
+        assert_eq!(deserialized.encrypted_decapsulation_key[ENCRYPTED_DK_SIZE - 1], 0xDD);
     }
 
     #[test]
     fn test_pq_metadata_write_read() {
+        let mut ek = [0u8; MLKEM1024_EK_SIZE];
+        let mut ct = [0u8; MLKEM1024_CT_SIZE];
+        let mut edk = [0u8; ENCRYPTED_DK_SIZE];
+
+        // Fill with different test patterns
+        for i in 0..16 {
+            ek[i] = i as u8;
+            ct[i] = (i + 16) as u8;
+            edk[i] = (i + 32) as u8;
+        }
+
         let metadata = PqVolumeMetadata {
             algorithm: PqAlgorithm::MlKem1024,
-            encapsulation_key: "ek_base64".to_string(),
-            ciphertext: "ct_base64".to_string(),
-            encrypted_decapsulation_key: "edk_base64".to_string(),
+            encapsulation_key: ek,
+            ciphertext: ct,
+            encrypted_decapsulation_key: edk,
         };
 
         let mut buffer = Vec::new();
@@ -702,6 +755,21 @@ mod tests {
         assert_eq!(read_metadata.encapsulation_key, metadata.encapsulation_key);
         assert_eq!(read_metadata.ciphertext, metadata.ciphertext);
         assert_eq!(read_metadata.encrypted_decapsulation_key, metadata.encrypted_decapsulation_key);
+    }
+
+    #[test]
+    fn test_pq_metadata_size_constant() {
+        // Verify the size constant matches actual serialization
+        let metadata = PqVolumeMetadata {
+            algorithm: PqAlgorithm::MlKem1024,
+            encapsulation_key: [0u8; MLKEM1024_EK_SIZE],
+            ciphertext: [0u8; MLKEM1024_CT_SIZE],
+            encrypted_decapsulation_key: [0u8; ENCRYPTED_DK_SIZE],
+        };
+
+        let bytes = metadata.to_bytes().unwrap();
+        assert_eq!(bytes.len(), PQ_METADATA_SIZE);
+        assert_eq!(PqVolumeMetadata::serialized_size(), PQ_METADATA_SIZE);
     }
 
     #[test]

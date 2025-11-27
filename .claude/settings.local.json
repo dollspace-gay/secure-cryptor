@@ -65,7 +65,16 @@
       "Bash(cargo doc:*)",
       "Bash(target/release/tesseract.exe:*)",
       "Bash(where:*)",
-      "Bash(setx PATH \"%PATH%;C:\\Program Files (x86)\\WinFsp\\bin\")"
+      "Bash(setx PATH \"%PATH%;C:\\Program Files (x86)\\WinFsp\\bin\")",
+      "Bash(rustc:*)",
+      "Bash(cargo --version:*)",
+      "Bash(rustfmt:*)",
+      "Bash(git --version:*)",
+      "Bash(cmd /c:*)",
+      "Bash(powershell:*)",
+      "Bash(C:Userstexasgobinbd.exe list)",
+      "Bash(tr:*)",
+      "Bash(./target/release/tesseract.exe:*)"
     ],
     "deny": [],
     "ask": []
