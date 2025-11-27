@@ -2,7 +2,7 @@
 ///
 /// Uses systemd-logind D-Bus interface to monitor system power events
 
-use super::{PowerCallback, PowerEvent, PowerMonitorError, Result};
+use super::{PowerCallback, PowerEvent, Result};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -34,7 +34,7 @@ impl LinuxPowerMonitor {
         *running = true;
         drop(running);
 
-        let callbacks = self.callbacks.clone();
+        let _callbacks = self.callbacks.clone();
         let running = self.running.clone();
 
         // Spawn monitoring thread

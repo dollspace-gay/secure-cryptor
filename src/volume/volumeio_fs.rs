@@ -724,11 +724,11 @@ impl VolumeIOFilesystem {
 
             // Pad to rec_len
             let padding = entry.rec_len as usize - 8 - entry.name_len as usize;
-            data.extend(std::iter::repeat(0u8).take(padding));
+            data.extend(std::iter::repeat_n(0u8, padding));
         }
 
         // Pad to block boundary
-        let block_count = (data.len() + FS_BLOCK_SIZE as usize - 1) / FS_BLOCK_SIZE as usize;
+        let block_count = data.len().div_ceil(FS_BLOCK_SIZE as usize);
         data.resize(block_count * FS_BLOCK_SIZE as usize, 0);
 
         // Ensure we have enough blocks allocated
@@ -877,7 +877,7 @@ impl VolumeIOFilesystem {
             if block_num == 0 {
                 // Sparse file - return zeros
                 let zeros_to_add = remaining.min((FS_BLOCK_SIZE as usize - block_offset) as u32);
-                result.extend(std::iter::repeat(0u8).take(zeros_to_add as usize));
+                result.extend(std::iter::repeat_n(0u8, zeros_to_add as usize));
                 current_offset += zeros_to_add as u64;
                 remaining -= zeros_to_add;
                 continue;
@@ -931,7 +931,7 @@ impl VolumeIOFilesystem {
         let new_size = offset + data.len() as u64;
         if new_size > inode.size {
             inode.size = new_size;
-            inode.blocks = ((new_size + 511) / 512) as u64;
+            inode.blocks = new_size.div_ceil(512);
         }
 
         // Update modification time
@@ -1432,8 +1432,8 @@ impl VolumeIOFilesystem {
 
         if size < old_size {
             // Shrinking - free unused blocks
-            let old_blocks = (old_size + block_size - 1) / block_size;
-            let new_blocks = (size + block_size - 1) / block_size;
+            let old_blocks = old_size.div_ceil(block_size);
+            let new_blocks = size.div_ceil(block_size);
 
             for block_idx in new_blocks..old_blocks {
                 if block_idx < DIRECT_BLOCKS as u64 {
@@ -1449,7 +1449,7 @@ impl VolumeIOFilesystem {
         // When growing, blocks are allocated on write
 
         inode.size = size;
-        inode.blocks = ((size + block_size - 1) / block_size) * (block_size / 512);
+        inode.blocks = size.div_ceil(block_size) * (block_size / 512);
         inode.mtime = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
@@ -1578,11 +1578,10 @@ impl VolumeIOFilesystem {
         }
 
         // Root inode should always be a directory
-        if inode_num == ROOT_INODE && inode.nlink > 0 {
-            if !inode.is_dir() {
+        if inode_num == ROOT_INODE && inode.nlink > 0
+            && !inode.is_dir() {
                 return false;
             }
-        }
 
         true
     }
@@ -2305,8 +2304,8 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
             return Err(FilesystemError::IsADirectory(path.to_path_buf()));
         }
 
-        let old_blocks = (inode.size + FS_BLOCK_SIZE as u64 - 1) / FS_BLOCK_SIZE as u64;
-        let new_blocks = (size + FS_BLOCK_SIZE as u64 - 1) / FS_BLOCK_SIZE as u64;
+        let old_blocks = inode.size.div_ceil(FS_BLOCK_SIZE as u64);
+        let new_blocks = size.div_ceil(FS_BLOCK_SIZE as u64);
 
         if size < inode.size {
             // Shrinking - free excess blocks
@@ -2323,7 +2322,7 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
         }
 
         inode.size = size;
-        inode.blocks = (size + 511) / 512;
+        inode.blocks = size.div_ceil(512);
         inode.mtime = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .map(|d| d.as_secs())

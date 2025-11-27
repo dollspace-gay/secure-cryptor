@@ -500,7 +500,7 @@ mod tests {
         allocation.write(b"Sensitive data").unwrap();
 
         // Get raw pointer to data before drop
-        let data_ptr = allocation.data.as_ptr();
+        let _data_ptr = allocation.data.as_ptr();
 
         // Drop the allocation
         drop(allocation);

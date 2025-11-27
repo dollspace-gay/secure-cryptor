@@ -900,7 +900,7 @@ impl Container {
         // Encrypt the backup
         let cipher = Aes256Gcm::new_from_slice(&key[..])
             .map_err(|e| ContainerError::Other(format!("Cipher creation failed: {}", e)))?;
-        let nonce = Nonce::try_from(nonce_bytes).expect("Invalid nonce length");
+        let nonce = Nonce::from(nonce_bytes);
         let ciphertext = cipher.encrypt(&nonce, backup_data.as_ref())
             .map_err(|e| ContainerError::Other(format!("Encryption failed: {}", e)))?;
 
@@ -980,7 +980,7 @@ impl Container {
         // Decrypt the backup
         let cipher = Aes256Gcm::new_from_slice(&key[..])
             .map_err(|e| ContainerError::Other(format!("Cipher creation failed: {}", e)))?;
-        let nonce = Nonce::try_from(nonce_bytes).expect("Invalid nonce length");
+        let nonce = Nonce::from(nonce_bytes);
         let plaintext = cipher.decrypt(&nonce, ciphertext.as_ref())
             .map_err(|_| ContainerError::Other("Decryption failed: incorrect password or corrupted backup".to_string()))?;
 

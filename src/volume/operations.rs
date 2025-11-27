@@ -164,7 +164,7 @@ impl InMemoryFilesystem {
         let cipher = Aes256Gcm::new_from_slice(key.as_bytes())
             .map_err(|e| FilesystemError::CryptoError(e.to_string()))?;
 
-        let nonce = Nonce::try_from(nonce_bytes).expect("Invalid nonce length");
+        let nonce = Nonce::from(nonce_bytes);
         let ciphertext = cipher.encrypt(&nonce, data)
             .map_err(|e| FilesystemError::CryptoError(e.to_string()))?;
 
@@ -190,7 +190,7 @@ impl InMemoryFilesystem {
         let cipher = Aes256Gcm::new_from_slice(key.as_bytes())
             .map_err(|e| FilesystemError::CryptoError(e.to_string()))?;
 
-        let nonce = Nonce::try_from(nonce_bytes).expect("Invalid nonce length");
+        let nonce = Nonce::from(nonce_bytes);
         let plaintext = cipher.decrypt(&nonce, ciphertext)
             .map_err(|_| FilesystemError::CryptoError("Decryption failed".to_string()))?;
 

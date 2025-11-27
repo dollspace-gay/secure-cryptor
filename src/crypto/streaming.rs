@@ -2370,8 +2370,8 @@ mod tests {
     #[test]
     fn test_parallel_vs_sequential_same_output() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        
+        
         use std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;

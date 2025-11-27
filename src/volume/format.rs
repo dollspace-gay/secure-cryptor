@@ -555,7 +555,7 @@ impl DirEntry {
 
         // Record length must be 4-byte aligned
         let base_size = 8; // inode(4) + rec_len(2) + name_len(1) + file_type(1)
-        let rec_len = ((base_size + name_len as u16 + 3) / 4) * 4;
+        let rec_len = (base_size + name_len as u16).div_ceil(4) * 4;
 
         Self {
             inode,
@@ -705,7 +705,7 @@ pub struct Bitmap {
 impl Bitmap {
     /// Creates a new bitmap with given size in bits
     pub fn new(bits: usize) -> Self {
-        let bytes = (bits + 7) / 8;
+        let bytes = bits.div_ceil(8);
         Self {
             data: vec![0u8; bytes],
         }
@@ -757,12 +757,7 @@ impl Bitmap {
     /// Finds the first clear bit starting from `start`
     pub fn find_first_clear(&self, start: usize) -> Option<usize> {
         let total_bits = self.data.len() * 8;
-        for i in start..total_bits {
-            if !self.is_set(i) {
-                return Some(i);
-            }
-        }
-        None
+        (start..total_bits).find(|&i| !self.is_set(i))
     }
 
     /// Counts set bits

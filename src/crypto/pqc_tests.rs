@@ -184,7 +184,7 @@ mod hybrid_mode_tests {
 
         let classical_key = Zeroizing::new([0x42u8; 32]);
         let keypair = MlKemKeyPair::generate();
-        let (ciphertext, pq_secret) = encapsulate(keypair.encapsulation_key()).unwrap();
+        let (_ciphertext, pq_secret) = encapsulate(keypair.encapsulation_key()).unwrap();
 
         // Derive hybrid key twice with same inputs
         let hybrid1 = derive_hybrid_key(&classical_key, &pq_secret);

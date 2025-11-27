@@ -216,7 +216,7 @@ impl AsyncStorageBackend for BlockingAdapter {
             // In a real implementation, this would use tokio::task::spawn_blocking
             // For now, we do it inline since we're keeping it simple
             let mut guard = backend.lock().map_err(|_| {
-                io::Error::new(io::ErrorKind::Other, "lock poisoned")
+                io::Error::other("lock poisoned")
             })?;
 
             let mut buf = vec![0u8; chunk_size as usize];
@@ -237,7 +237,7 @@ impl AsyncStorageBackend for BlockingAdapter {
 
         Box::pin(async move {
             let mut guard = backend.lock().map_err(|_| {
-                io::Error::new(io::ErrorKind::Other, "lock poisoned")
+                io::Error::other("lock poisoned")
             })?;
 
             guard.write_at(offset, data)?;
@@ -250,7 +250,7 @@ impl AsyncStorageBackend for BlockingAdapter {
 
         Box::pin(async move {
             let mut guard = backend.lock().map_err(|_| {
-                io::Error::new(io::ErrorKind::Other, "lock poisoned")
+                io::Error::other("lock poisoned")
             })?;
 
             guard.flush()
@@ -262,7 +262,7 @@ impl AsyncStorageBackend for BlockingAdapter {
 
         Box::pin(async move {
             let guard = backend.lock().map_err(|_| {
-                io::Error::new(io::ErrorKind::Other, "lock poisoned")
+                io::Error::other("lock poisoned")
             })?;
 
             guard.size()
@@ -1038,7 +1038,7 @@ impl AsyncStorageBackend for AsyncMemoryBackend {
         // Lock, clone, release - all synchronously before the async block
         let data_result: io::Result<Vec<u8>> = self.data.lock()
             .map(|guard| guard.clone())
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "lock poisoned"));
+            .map_err(|_| io::Error::other("lock poisoned"));
 
         Box::pin(async move {
             let data = data_result?;
@@ -1056,7 +1056,7 @@ impl AsyncStorageBackend for AsyncMemoryBackend {
         // Perform the write synchronously before the async block
         let result: io::Result<()> = (|| {
             let mut data = self.data.lock().map_err(|_| {
-                io::Error::new(io::ErrorKind::Other, "lock poisoned")
+                io::Error::other("lock poisoned")
             })?;
 
             if offset >= data.len() {
@@ -1080,7 +1080,7 @@ impl AsyncStorageBackend for AsyncMemoryBackend {
         // Get size synchronously before async block
         let size_result: io::Result<u64> = self.data.lock()
             .map(|guard| guard.len() as u64)
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "lock poisoned"));
+            .map_err(|_| io::Error::other("lock poisoned"));
 
         Box::pin(async move { size_result })
     }
