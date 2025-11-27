@@ -75,6 +75,35 @@ pub enum VolumeIOFsError {
 
 pub type Result<T> = std::result::Result<T, VolumeIOFsError>;
 
+/// Result of a filesystem check (fsck) operation
+#[derive(Debug, Default)]
+pub struct FsckResult {
+    /// Total inodes scanned
+    pub inodes_scanned: u32,
+    /// Number of corrupted inodes found
+    pub corrupted_inodes: u32,
+    /// Number of orphaned blocks (allocated but not referenced)
+    pub orphaned_blocks: u32,
+    /// Number of lost inodes (allocated but not in any directory)
+    pub lost_inodes: u32,
+    /// Number of bitmap inconsistencies
+    pub bitmap_errors: u32,
+    /// Number of errors repaired
+    pub errors_repaired: u32,
+    /// Detailed error messages
+    pub messages: Vec<String>,
+}
+
+impl FsckResult {
+    /// Returns true if no errors were found
+    pub fn is_clean(&self) -> bool {
+        self.corrupted_inodes == 0
+            && self.orphaned_blocks == 0
+            && self.lost_inodes == 0
+            && self.bitmap_errors == 0
+    }
+}
+
 /// VolumeIO-backed filesystem
 ///
 /// Implements a complete filesystem using VolumeIO for encrypted storage.
@@ -1439,6 +1468,470 @@ impl VolumeIOFilesystem {
     /// Returns the root inode number
     pub fn root_inode(&self) -> u32 {
         ROOT_INODE
+    }
+
+    // ========================================================================
+    // Filesystem check and recovery (fsck)
+    // ========================================================================
+
+    /// Checks filesystem consistency without making repairs
+    pub fn fsck(&self) -> Result<FsckResult> {
+        self.fsck_internal(false)
+    }
+
+    /// Checks filesystem consistency and attempts repairs
+    pub fn fsck_repair(&self) -> Result<FsckResult> {
+        self.fsck_internal(true)
+    }
+
+    fn fsck_internal(&self, repair: bool) -> Result<FsckResult> {
+        let mut result = FsckResult::default();
+
+        // Get superblock
+        let sb = self.get_superblock()?;
+
+        // Phase 1: Check all inodes for corruption
+        result.messages.push("Phase 1: Checking inodes...".to_string());
+        let valid_inodes = self.fsck_check_inodes(&sb, &mut result)?;
+
+        // Phase 2: Build block usage map from valid inodes
+        result.messages.push("Phase 2: Building block usage map...".to_string());
+        let (used_blocks, used_inodes) = self.fsck_build_usage_maps(&valid_inodes, &mut result)?;
+
+        // Phase 3: Check block bitmap consistency
+        result.messages.push("Phase 3: Checking block bitmap...".to_string());
+        let _block_errors = self.fsck_check_block_bitmap(&sb, &used_blocks, &mut result)?;
+
+        // Phase 4: Check inode bitmap consistency
+        result.messages.push("Phase 4: Checking inode bitmap...".to_string());
+        let _inode_errors = self.fsck_check_inode_bitmap(&sb, &used_inodes, &mut result)?;
+
+        // Phase 5: Check directory tree connectivity
+        result.messages.push("Phase 5: Checking directory tree...".to_string());
+        self.fsck_check_directory_tree(&valid_inodes, &mut result)?;
+
+        // Phase 6: Repair if requested
+        if repair && !result.is_clean() {
+            result.messages.push("Phase 6: Repairing filesystem...".to_string());
+            self.fsck_repair_filesystem(&used_blocks, &used_inodes, &mut result)?;
+        }
+
+        result.messages.push(format!(
+            "Filesystem check complete: {} inodes scanned, {} errors found",
+            result.inodes_scanned,
+            result.corrupted_inodes + result.orphaned_blocks + result.lost_inodes + result.bitmap_errors
+        ));
+
+        Ok(result)
+    }
+
+    fn fsck_check_inodes(&self, sb: &Superblock, result: &mut FsckResult) -> Result<HashMap<u32, Inode>> {
+        let mut valid_inodes = HashMap::new();
+
+        for inode_num in 1..=sb.total_inodes {
+            result.inodes_scanned += 1;
+
+            match self.read_inode(inode_num) {
+                Ok(inode) => {
+                    // Validate inode
+                    if self.fsck_validate_inode(inode_num, &inode, sb) {
+                        valid_inodes.insert(inode_num, inode);
+                    } else {
+                        result.corrupted_inodes += 1;
+                        result.messages.push(format!(
+                            "Corrupted inode {}: invalid structure",
+                            inode_num
+                        ));
+                    }
+                }
+                Err(e) => {
+                    result.corrupted_inodes += 1;
+                    result.messages.push(format!(
+                        "Cannot read inode {}: {}",
+                        inode_num, e
+                    ));
+                }
+            }
+        }
+
+        Ok(valid_inodes)
+    }
+
+    fn fsck_validate_inode(&self, inode_num: u32, inode: &Inode, sb: &Superblock) -> bool {
+        // Check if inode looks valid
+        // An unallocated inode should have nlink=0
+        if inode.nlink == 0 && inode.size == 0 && inode.mode == 0 {
+            return true; // Empty/unallocated inode is valid
+        }
+
+        // Check mode - should be a valid type
+        let mode_type = inode.mode & 0o170000;
+        if mode_type != 0o100000 && mode_type != 0o040000 && mode_type != 0o120000 && mode_type != 0 {
+            return false;
+        }
+
+        // Check that direct block pointers are within valid range
+        for &block in &inode.direct {
+            if block != 0 && block >= sb.total_blocks as u32 {
+                return false;
+            }
+        }
+
+        // Root inode should always be a directory
+        if inode_num == ROOT_INODE && inode.nlink > 0 {
+            if !inode.is_dir() {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn fsck_build_usage_maps(
+        &self,
+        valid_inodes: &HashMap<u32, Inode>,
+        result: &mut FsckResult,
+    ) -> Result<(Bitmap, Bitmap)> {
+        let sb = self.get_superblock()?;
+
+        // Create bitmaps for tracking actual usage
+        let mut used_blocks = Bitmap::new(sb.total_blocks as usize);
+        let mut used_inodes = Bitmap::new(sb.total_inodes as usize);
+
+        // Mark metadata blocks as used
+        for block in 0..DATA_BLOCKS_START {
+            used_blocks.set(block as usize);
+        }
+
+        // Process each valid inode
+        for (&inode_num, inode) in valid_inodes {
+            if inode.nlink > 0 {
+                // Mark inode as used
+                used_inodes.set(inode_num as usize);
+
+                // Mark data blocks as used
+                for &block in &inode.direct {
+                    if block != 0 {
+                        if used_blocks.is_set(block as usize) {
+                            result.messages.push(format!(
+                                "Block {} referenced by multiple inodes (found in inode {})",
+                                block, inode_num
+                            ));
+                        }
+                        used_blocks.set(block as usize);
+                    }
+                }
+
+                // TODO: Handle indirect blocks
+            }
+        }
+
+        Ok((used_blocks, used_inodes))
+    }
+
+    fn fsck_check_block_bitmap(
+        &self,
+        sb: &Superblock,
+        used_blocks: &Bitmap,
+        result: &mut FsckResult,
+    ) -> Result<u32> {
+        let mut errors = 0;
+
+        let stored_bitmap = self.block_bitmap.read()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)?;
+
+        if let Some(stored) = stored_bitmap.as_ref() {
+            for i in 0..sb.total_blocks as usize {
+                let actual_used = used_blocks.is_set(i);
+                let bitmap_says_used = stored.is_set(i);
+
+                if actual_used && !bitmap_says_used {
+                    // Block is used but not marked in bitmap
+                    result.messages.push(format!(
+                        "Block {} is used but not marked in bitmap",
+                        i
+                    ));
+                    errors += 1;
+                    result.bitmap_errors += 1;
+                } else if !actual_used && bitmap_says_used && i >= DATA_BLOCKS_START as usize {
+                    // Block is marked used but not referenced (orphaned)
+                    result.orphaned_blocks += 1;
+                    result.messages.push(format!(
+                        "Block {} is marked used but not referenced (orphaned)",
+                        i
+                    ));
+                }
+            }
+        }
+
+        Ok(errors)
+    }
+
+    fn fsck_check_inode_bitmap(
+        &self,
+        sb: &Superblock,
+        used_inodes: &Bitmap,
+        result: &mut FsckResult,
+    ) -> Result<u32> {
+        let mut errors = 0;
+
+        let stored_bitmap = self.inode_bitmap.read()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)?;
+
+        if let Some(stored) = stored_bitmap.as_ref() {
+            for i in 1..=sb.total_inodes as usize {
+                let actual_used = used_inodes.is_set(i);
+                let bitmap_says_used = stored.is_set(i);
+
+                if actual_used && !bitmap_says_used {
+                    result.messages.push(format!(
+                        "Inode {} is used but not marked in bitmap",
+                        i
+                    ));
+                    errors += 1;
+                    result.bitmap_errors += 1;
+                } else if !actual_used && bitmap_says_used {
+                    result.lost_inodes += 1;
+                    result.messages.push(format!(
+                        "Inode {} is marked used but not referenced (lost)",
+                        i
+                    ));
+                }
+            }
+        }
+
+        Ok(errors)
+    }
+
+    fn fsck_check_directory_tree(
+        &self,
+        valid_inodes: &HashMap<u32, Inode>,
+        result: &mut FsckResult,
+    ) -> Result<()> {
+        // Check that root directory exists and is valid
+        if let Some(root) = valid_inodes.get(&ROOT_INODE) {
+            if !root.is_dir() {
+                result.messages.push("Root inode is not a directory".to_string());
+                result.corrupted_inodes += 1;
+            } else {
+                // Check directory entries
+                match self.read_dir_entries(ROOT_INODE) {
+                    Ok(entries) => {
+                        // Root should have . and .. entries
+                        let has_dot = entries.iter().any(|e| e.name_str().map(|n| n == ".").unwrap_or(false));
+                        let has_dotdot = entries.iter().any(|e| e.name_str().map(|n| n == "..").unwrap_or(false));
+
+                        if !has_dot {
+                            result.messages.push("Root directory missing '.' entry".to_string());
+                            result.corrupted_inodes += 1;
+                        }
+                        if !has_dotdot {
+                            result.messages.push("Root directory missing '..' entry".to_string());
+                            result.corrupted_inodes += 1;
+                        }
+
+                        // Check that directory entries point to valid inodes
+                        for entry in entries {
+                            if !valid_inodes.contains_key(&entry.inode) {
+                                if let Ok(name) = entry.name_str() {
+                                    result.messages.push(format!(
+                                        "Directory entry '{}' points to invalid inode {}",
+                                        name, entry.inode
+                                    ));
+                                    result.corrupted_inodes += 1;
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        result.messages.push(format!(
+                            "Cannot read root directory: {}",
+                            e
+                        ));
+                        result.corrupted_inodes += 1;
+                    }
+                }
+            }
+        } else {
+            result.messages.push("Root inode not found".to_string());
+            result.corrupted_inodes += 1;
+        }
+
+        Ok(())
+    }
+
+    fn fsck_repair_filesystem(
+        &self,
+        used_blocks: &Bitmap,
+        used_inodes: &Bitmap,
+        result: &mut FsckResult,
+    ) -> Result<()> {
+        // Repair block bitmap
+        {
+            let mut bitmap = self.block_bitmap.write()
+                .map_err(|_| VolumeIOFsError::LockPoisoned)?;
+
+            if let Some(bm) = bitmap.as_mut() {
+                let sb = self.get_superblock()?;
+                let mut repaired = 0;
+
+                for i in 0..sb.total_blocks as usize {
+                    let should_be_used = used_blocks.is_set(i);
+                    let is_used = bm.is_set(i);
+
+                    if should_be_used != is_used {
+                        if should_be_used {
+                            bm.set(i);
+                        } else {
+                            bm.clear(i);
+                        }
+                        repaired += 1;
+                    }
+                }
+
+                if repaired > 0 {
+                    drop(bitmap);
+                    let bitmap = self.block_bitmap.read()
+                        .map_err(|_| VolumeIOFsError::LockPoisoned)?;
+                    if let Some(bm) = bitmap.as_ref() {
+                        self.write_block_bitmap(bm)?;
+                    }
+                    result.errors_repaired += repaired;
+                    result.messages.push(format!("Repaired {} block bitmap entries", repaired));
+                }
+            }
+        }
+
+        // Repair inode bitmap
+        {
+            let mut bitmap = self.inode_bitmap.write()
+                .map_err(|_| VolumeIOFsError::LockPoisoned)?;
+
+            if let Some(bm) = bitmap.as_mut() {
+                let sb = self.get_superblock()?;
+                let mut repaired = 0;
+
+                for i in 1..=sb.total_inodes as usize {
+                    let should_be_used = used_inodes.is_set(i);
+                    let is_used = bm.is_set(i);
+
+                    if should_be_used != is_used {
+                        if should_be_used {
+                            bm.set(i);
+                        } else {
+                            bm.clear(i);
+                        }
+                        repaired += 1;
+                    }
+                }
+
+                if repaired > 0 {
+                    drop(bitmap);
+                    let bitmap = self.inode_bitmap.read()
+                        .map_err(|_| VolumeIOFsError::LockPoisoned)?;
+                    if let Some(bm) = bitmap.as_ref() {
+                        self.write_inode_bitmap(bm)?;
+                    }
+                    result.errors_repaired += repaired;
+                    result.messages.push(format!("Repaired {} inode bitmap entries", repaired));
+                }
+            }
+        }
+
+        // Update superblock free counts
+        {
+            let mut sb_lock = self.superblock.write()
+                .map_err(|_| VolumeIOFsError::LockPoisoned)?;
+
+            if let Some(sb) = sb_lock.as_mut() {
+                let block_bitmap = self.block_bitmap.read()
+                    .map_err(|_| VolumeIOFsError::LockPoisoned)?;
+
+                if let Some(bm) = block_bitmap.as_ref() {
+                    let free_blocks = (0..sb.total_blocks as usize)
+                        .filter(|&i| !bm.is_set(i))
+                        .count() as u64;
+
+                    if sb.free_blocks != free_blocks {
+                        result.messages.push(format!(
+                            "Fixed free_blocks: {} -> {}",
+                            sb.free_blocks, free_blocks
+                        ));
+                        sb.free_blocks = free_blocks;
+                        result.errors_repaired += 1;
+                    }
+                }
+
+                drop(sb_lock);
+                self.sync()?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Rebuilds the free block bitmap from scratch by scanning all inodes
+    pub fn rebuild_block_bitmap(&self) -> Result<u32> {
+        let sb = self.get_superblock()?;
+
+        // Create a new bitmap
+        let mut new_bitmap = Bitmap::new(sb.total_blocks as usize);
+
+        // Mark metadata blocks as used
+        for block in 0..DATA_BLOCKS_START {
+            new_bitmap.set(block as usize);
+        }
+
+        let mut blocks_recovered = 0;
+
+        // Scan all inodes
+        for inode_num in 1..=sb.total_inodes {
+            if let Ok(inode) = self.read_inode(inode_num) {
+                if inode.nlink > 0 {
+                    // Mark data blocks as used
+                    for &block in &inode.direct {
+                        if block != 0 && block < sb.total_blocks as u32 {
+                            if !new_bitmap.is_set(block as usize) {
+                                blocks_recovered += 1;
+                            }
+                            new_bitmap.set(block as usize);
+                        }
+                    }
+                    // TODO: Handle indirect blocks
+                }
+            }
+        }
+
+        // Update the bitmap
+        self.write_block_bitmap(&new_bitmap)?;
+
+        // Update in-memory copy
+        {
+            let mut bitmap = self.block_bitmap.write()
+                .map_err(|_| VolumeIOFsError::LockPoisoned)?;
+            *bitmap = Some(new_bitmap);
+        }
+
+        // Update superblock free count
+        {
+            let mut sb_lock = self.superblock.write()
+                .map_err(|_| VolumeIOFsError::LockPoisoned)?;
+
+            if let Some(sb) = sb_lock.as_mut() {
+                let block_bitmap = self.block_bitmap.read()
+                    .map_err(|_| VolumeIOFsError::LockPoisoned)?;
+
+                if let Some(bm) = block_bitmap.as_ref() {
+                    sb.free_blocks = (0..sb.total_blocks as usize)
+                        .filter(|&i| !bm.is_set(i))
+                        .count() as u64;
+                }
+            }
+        }
+
+        self.sync()?;
+
+        Ok(blocks_recovered)
     }
 }
 
