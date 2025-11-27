@@ -4,6 +4,7 @@
 //! allowing for pluggable implementations of different encryption algorithms.
 
 pub mod aes_gcm;
+pub mod hardware;
 pub mod kdf;
 pub mod pqc;
 pub mod signatures;
