@@ -1,4 +1,4 @@
-# Formal Specifications for Tesseract Vault Vault Cryptographic Primitives
+# Formal Specifications for Tesseract Vault Cryptographic Primitives
 
 ## Overview
 

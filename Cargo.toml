@@ -129,6 +129,11 @@ criterion = "0.5"
 quickcheck = "1.0"
 wasm-bindgen-test = "0.3"
 prusti-contracts = "0.2"
+serde_json = "1.0"
+hex = "0.4"
+
+# Kani only works on Unix systems (Linux/macOS), not Windows
+[target.'cfg(unix)'.dev-dependencies]
 kani-verifier = "0.66"
 
 [[bench]]

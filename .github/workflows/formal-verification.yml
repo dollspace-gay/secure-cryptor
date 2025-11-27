@@ -74,6 +74,34 @@ jobs:
           cargo kani --lib --harness verify_config_validity
           echo "::endgroup::"
 
+  wycheproof-verify:
+    name: Wycheproof Cryptographic Test Vectors
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Clone Wycheproof test vectors
+        run: |
+          git clone --depth 1 https://github.com/C2SP/wycheproof.git tests/wycheproof
+
+      - name: Run Wycheproof AES-GCM tests
+        run: |
+          echo "::group::Wycheproof AES-GCM Tests"
+          cargo test --test wycheproof_tests -- --nocapture
+          echo "::endgroup::"
+
   prusti-verify:
     name: Prusti Deductive Verification
     runs-on: ubuntu-latest
@@ -121,7 +149,7 @@ jobs:
 
   verification-summary:
     name: Verification Summary
-    needs: [kani-verify, prusti-verify]
+    needs: [kani-verify, wycheproof-verify, prusti-verify]
     runs-on: ubuntu-latest
     if: always()
 
@@ -135,9 +163,15 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Status" >> $GITHUB_STEP_SUMMARY
           echo "- Kani Verification: ${{ needs.kani-verify.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Wycheproof Test Vectors: ${{ needs.wycheproof-verify.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Prusti Verification: ${{ needs.prusti-verify.result }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "- **Kani**: 21 proof harnesses (10 AES-GCM + 11 Argon2id)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Wycheproof**: 66 AES-256-GCM test vectors from C2SP" >> $GITHUB_STEP_SUMMARY
+          echo "- **Prusti**: Contract annotations (in progress)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "1. Add Kani proof harnesses to crypto modules" >> $GITHUB_STEP_SUMMARY
-          echo "2. Add Prusti specifications to public APIs" >> $GITHUB_STEP_SUMMARY
-          echo "3. Gradually increase verification coverage" >> $GITHUB_STEP_SUMMARY
+          echo "1. Add Prusti contract annotations to public APIs" >> $GITHUB_STEP_SUMMARY
+          echo "2. Expand Wycheproof coverage to other algorithms" >> $GITHUB_STEP_SUMMARY
+          echo "3. Add more Kani harnesses for edge cases" >> $GITHUB_STEP_SUMMARY
