@@ -27,7 +27,7 @@
 //! # Usage
 //!
 //! ```no_run
-//! use tesseract::hsm::yubikey::YubiKey;
+//! use tesseract_lib::hsm::yubikey::YubiKey;
 //!
 //! // Initialize YubiKey
 //! let yubikey = YubiKey::new()?;

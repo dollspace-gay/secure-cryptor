@@ -721,7 +721,7 @@ impl Container {
     /// # Example
     ///
     /// ```no_run
-    /// # use tesseract::volume::Container;
+    /// # use tesseract_lib::volume::Container;
     /// # use std::path::Path;
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut container = Container::open(Path::new("vault.enc"), "password")?;
@@ -895,7 +895,7 @@ impl Container {
         // Encrypt the backup
         let cipher = Aes256Gcm::new_from_slice(&key[..])
             .map_err(|e| ContainerError::Other(format!("Cipher creation failed: {}", e)))?;
-        let nonce = *Nonce::from_slice(&nonce_bytes);
+        let nonce = Nonce::try_from(nonce_bytes).expect("Invalid nonce length");
         let ciphertext = cipher.encrypt(&nonce, backup_data.as_ref())
             .map_err(|e| ContainerError::Other(format!("Encryption failed: {}", e)))?;
 
@@ -975,7 +975,7 @@ impl Container {
         // Decrypt the backup
         let cipher = Aes256Gcm::new_from_slice(&key[..])
             .map_err(|e| ContainerError::Other(format!("Cipher creation failed: {}", e)))?;
-        let nonce = *Nonce::from_slice(&nonce_bytes);
+        let nonce = Nonce::try_from(nonce_bytes).expect("Invalid nonce length");
         let plaintext = cipher.decrypt(&nonce, ciphertext.as_ref())
             .map_err(|_| ContainerError::Other("Decryption failed: incorrect password or corrupted backup".to_string()))?;
 

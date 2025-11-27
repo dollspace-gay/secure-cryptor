@@ -66,7 +66,7 @@ pub fn read_file(path: &Path) -> Result<Vec<u8>> {
 /// # Examples
 ///
 /// ```no_run
-/// # use tesseract::storage::write_file_atomic;
+/// # use tesseract_lib::storage::write_file_atomic;
 /// # use std::path::Path;
 /// let data = b"important data";
 /// write_file_atomic(Path::new("output.txt"), data).unwrap();

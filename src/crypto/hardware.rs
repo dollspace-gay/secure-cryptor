@@ -12,7 +12,7 @@
 //! # Example
 //!
 //! ```
-//! use tesseract::crypto::hardware::{HardwareCapabilities, detect_capabilities};
+//! use tesseract_lib::crypto::hardware::{HardwareCapabilities, detect_capabilities};
 //!
 //! let caps = detect_capabilities();
 //! println!("Hardware capabilities: {}", caps);
@@ -524,7 +524,7 @@ impl fmt::Display for ThroughputEstimate {
 /// # Example
 ///
 /// ```
-/// use tesseract::crypto::hardware::detect_capabilities;
+/// use tesseract_lib::crypto::hardware::detect_capabilities;
 ///
 /// let caps = detect_capabilities();
 /// println!("AES-NI available: {}", caps.has_aes_ni());
@@ -676,7 +676,7 @@ fn detect_arm_capabilities(caps: &mut HardwareCapabilities) {
 /// # Example
 ///
 /// ```
-/// use tesseract::crypto::hardware::has_hardware_acceleration;
+/// use tesseract_lib::crypto::hardware::has_hardware_acceleration;
 ///
 /// if has_hardware_acceleration() {
 ///     println!("Hardware crypto acceleration is available");
@@ -694,7 +694,7 @@ pub fn has_hardware_acceleration() -> bool {
 /// # Example
 ///
 /// ```
-/// use tesseract::crypto::hardware::print_capabilities_report;
+/// use tesseract_lib::crypto::hardware::print_capabilities_report;
 ///
 /// print_capabilities_report();
 /// ```
@@ -766,21 +766,22 @@ impl fmt::Display for BenchmarkResult {
 /// # Example
 ///
 /// ```
-/// use tesseract::crypto::hardware::benchmark_aes_gcm;
+/// use tesseract_lib::crypto::hardware::benchmark_aes_gcm;
 ///
 /// let result = benchmark_aes_gcm(1024 * 1024, 10); // 1MB, 10 iterations
 /// println!("{}", result);
 /// ```
 pub fn benchmark_aes_gcm(data_size: usize, iterations: u32) -> BenchmarkResult {
     use aes_gcm::{
-        aead::{Aead, KeyInit},
+        aead::{Aead, KeyInit, consts::U12},
         Aes256Gcm, Nonce,
     };
     use std::time::Instant;
 
     // Generate test data and key
     let key = [0x42u8; 32];
-    let nonce = Nonce::from_slice(&[0u8; 12]);
+    let nonce_bytes = [0u8; 12];
+    let nonce: &Nonce<U12> = (&nonce_bytes).into();
     let plaintext = vec![0xABu8; data_size];
 
     let cipher = Aes256Gcm::new_from_slice(&key).expect("Invalid key length");
@@ -824,13 +825,14 @@ pub fn benchmark_aes_gcm(data_size: usize, iterations: u32) -> BenchmarkResult {
 /// Benchmark result with throughput measurement.
 pub fn benchmark_aes_gcm_decrypt(data_size: usize, iterations: u32) -> BenchmarkResult {
     use aes_gcm::{
-        aead::{Aead, KeyInit},
+        aead::{Aead, KeyInit, consts::U12},
         Aes256Gcm, Nonce,
     };
     use std::time::Instant;
 
     let key = [0x42u8; 32];
-    let nonce = Nonce::from_slice(&[0u8; 12]);
+    let nonce_bytes = [0u8; 12];
+    let nonce: &Nonce<U12> = (&nonce_bytes).into();
     let plaintext = vec![0xABu8; data_size];
 
     let cipher = Aes256Gcm::new_from_slice(&key).expect("Invalid key length");
@@ -957,7 +959,7 @@ pub fn benchmark_blake3(data_size: usize, iterations: u32) -> BenchmarkResult {
 /// # Example
 ///
 /// ```
-/// use tesseract::crypto::hardware::run_benchmark_suite;
+/// use tesseract_lib::crypto::hardware::run_benchmark_suite;
 ///
 /// let results = run_benchmark_suite();
 /// for result in &results {
@@ -986,7 +988,7 @@ pub fn run_benchmark_suite() -> Vec<BenchmarkResult> {
 /// # Example
 ///
 /// ```no_run
-/// use tesseract::crypto::hardware::print_benchmark_report;
+/// use tesseract_lib::crypto::hardware::print_benchmark_report;
 ///
 /// print_benchmark_report();
 /// ```

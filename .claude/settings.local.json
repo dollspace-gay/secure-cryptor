@@ -74,7 +74,10 @@
       "Bash(powershell:*)",
       "Bash(C:Userstexasgobinbd.exe list)",
       "Bash(tr:*)",
-      "Bash(./target/release/tesseract.exe:*)"
+      "Bash(./target/release/tesseract.exe:*)",
+      "Bash(for:*)",
+      "Bash(do sed -i 's/use tesseract::/use tesseract_lib::/g' \"$f\")",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

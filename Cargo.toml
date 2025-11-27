@@ -44,7 +44,7 @@ name = "tesseract-register"
 path = "src/bin/register/mod.rs"
 
 [dependencies]
-aes-gcm = { path = "aes-gcm-fork/aes-gcm" }
+aes-gcm = "0.11.0-rc.2"
 xts-mode = "0.5"
 aes = "0.8"
 argon2 = "0.6.0-rc.2"
@@ -155,12 +155,3 @@ opt-level = 3  # Optimize for performance
 lto = true
 codegen-units = 1
 
-[patch.crates-io]
-crypto-common = { path = "rustcrypto-traits-fork/crypto-common" }
-cipher = { path = "rustcrypto-traits-fork/cipher" }
-aead = { path = "rustcrypto-traits-fork/aead" }
-inout = { path = "rustcrypto-utils-fork/inout" }
-block-buffer = { path = "rustcrypto-utils-fork/block-buffer" }
-digest = { path = "rustcrypto-traits-fork/digest" }
-universal-hash = { path = "rustcrypto-traits-fork/universal-hash" }
-ctr = { path = "rustcrypto-block-modes-fork/ctr" }

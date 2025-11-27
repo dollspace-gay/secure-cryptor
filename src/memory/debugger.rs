@@ -18,7 +18,7 @@
 //! # Usage
 //!
 //! ```no_run
-//! use tesseract::memory::debugger::{is_debugger_present, DebuggerMonitor};
+//! use tesseract_lib::memory::debugger::{is_debugger_present, DebuggerMonitor};
 //!
 //! // Simple check
 //! if is_debugger_present() {

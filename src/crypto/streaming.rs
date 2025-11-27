@@ -685,7 +685,7 @@ pub struct Chunk {
 /// # Examples
 ///
 /// ```no_run
-/// # use tesseract::crypto::streaming::{ChunkedReader, StreamConfig};
+/// # use tesseract_lib::crypto::streaming::{ChunkedReader, StreamConfig};
 /// # use std::path::Path;
 /// let config = StreamConfig::default();
 /// let mut reader = ChunkedReader::open(Path::new("large_file.dat"), config).unwrap();
@@ -874,16 +874,16 @@ impl Iterator for ChunkedReader {
 /// # Examples
 ///
 /// ```no_run
-/// # use tesseract::crypto::streaming::{ChunkedEncryptor, ChunkedReader, StreamConfig};
-/// # use tesseract::crypto::aes_gcm::AesGcmEncryptor;
-/// # use tesseract::crypto::kdf::Argon2Kdf;
-/// # use tesseract::crypto::KeyDerivation;
+/// # use tesseract_lib::crypto::streaming::{ChunkedEncryptor, ChunkedReader, StreamConfig};
+/// # use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
+/// # use tesseract_lib::crypto::kdf::Argon2Kdf;
+/// # use tesseract_lib::crypto::KeyDerivation;
 /// # use std::path::Path;
 /// # use std::fs::File;
 /// # use zeroize::Zeroizing;
 /// # use rand::rngs::OsRng;
 /// # use rand_core::TryRngCore;
-/// # use tesseract::config::NONCE_LEN;
+/// # use tesseract_lib::config::NONCE_LEN;
 /// let config = StreamConfig::default();
 /// let reader = ChunkedReader::open(Path::new("large_file.dat"), config).unwrap();
 ///
@@ -1179,10 +1179,10 @@ impl ChunkedEncryptor {
 /// # Examples
 ///
 /// ```no_run
-/// # use tesseract::crypto::streaming::ChunkedDecryptor;
-/// # use tesseract::crypto::aes_gcm::AesGcmEncryptor;
-/// # use tesseract::crypto::kdf::Argon2Kdf;
-/// # use tesseract::crypto::KeyDerivation;
+/// # use tesseract_lib::crypto::streaming::ChunkedDecryptor;
+/// # use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
+/// # use tesseract_lib::crypto::kdf::Argon2Kdf;
+/// # use tesseract_lib::crypto::KeyDerivation;
 /// # use std::fs::File;
 /// # use zeroize::Zeroizing;
 /// let encrypted_file = File::open("large_file.enc").unwrap();

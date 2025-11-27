@@ -24,7 +24,7 @@
 //! # Usage
 //!
 //! ```no_run
-//! use tesseract::memory::tme::{is_tme_supported, is_tme_enabled, TmeInfo};
+//! use tesseract_lib::memory::tme::{is_tme_supported, is_tme_enabled, TmeInfo};
 //!
 //! // Check if TME is supported by CPU
 //! if is_tme_supported() {
@@ -110,7 +110,7 @@ impl TmeInfo {
     /// # Example
     ///
     /// ```no_run
-    /// use tesseract::memory::tme::TmeInfo;
+    /// use tesseract_lib::memory::tme::TmeInfo;
     ///
     /// if let Some(info) = TmeInfo::detect() {
     ///     println!("TME is supported!");
@@ -167,7 +167,7 @@ impl TmeInfo {
 /// # Example
 ///
 /// ```no_run
-/// use tesseract::memory::tme::is_tme_supported;
+/// use tesseract_lib::memory::tme::is_tme_supported;
 ///
 /// if is_tme_supported() {
 ///     println!("This CPU supports Intel TME");
@@ -198,7 +198,7 @@ pub fn is_tme_supported() -> bool {
 /// # Example
 ///
 /// ```no_run
-/// use tesseract::memory::tme::is_tme_enabled;
+/// use tesseract_lib::memory::tme::is_tme_enabled;
 ///
 /// if is_tme_enabled() {
 ///     println!("All system memory is encrypted with TME");
@@ -276,7 +276,7 @@ fn is_cpuid_available() -> bool {
 /// # Example
 ///
 /// ```no_run
-/// use tesseract::memory::tme::get_tme_recommendation;
+/// use tesseract_lib::memory::tme::get_tme_recommendation;
 ///
 /// println!("{}", get_tme_recommendation());
 /// ```

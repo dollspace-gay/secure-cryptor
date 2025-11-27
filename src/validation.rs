@@ -90,7 +90,7 @@ pub fn get_password() -> Result<Zeroizing<String>> {
 /// # Examples
 ///
 /// ```
-/// # use tesseract::validation::validate_password;
+/// # use tesseract_lib::validation::validate_password;
 /// assert!(validate_password("Abcdef123!@#").is_ok());
 /// assert!(validate_password("weak").is_err());
 /// ```

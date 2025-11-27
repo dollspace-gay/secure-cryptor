@@ -15,7 +15,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use tesseract::{encrypt_file, decrypt_file};
+//! use tesseract_lib::{encrypt_file, decrypt_file};
 //! use std::path::Path;
 //!
 //! // Encrypt a file
@@ -95,7 +95,7 @@ use std::path::Path;
 /// # Examples
 ///
 /// ```no_run
-/// # use tesseract::encrypt_file;
+/// # use tesseract_lib::encrypt_file;
 /// # use std::path::Path;
 /// encrypt_file(
 ///     Path::new("document.pdf"),
@@ -183,7 +183,7 @@ pub fn encrypt_file_validated(input_path: &Path, output_path: &Path, password: &
 /// # Examples
 ///
 /// ```no_run
-/// # use tesseract::decrypt_file;
+/// # use tesseract_lib::decrypt_file;
 /// # use std::path::Path;
 /// decrypt_file(
 ///     Path::new("document.pdf.enc"),

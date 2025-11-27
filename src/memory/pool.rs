@@ -14,7 +14,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use tesseract::memory::pool::{EncryptedMemoryPool, SecurityLevel};
+//! use tesseract_lib::memory::pool::{EncryptedMemoryPool, SecurityLevel};
 //!
 //! let pool = EncryptedMemoryPool::new(SecurityLevel::High).unwrap();
 //! let mut allocation = pool.allocate(1024).unwrap();
@@ -120,7 +120,7 @@ impl EncryptedMemoryPool {
     /// # Example
     ///
     /// ```
-    /// use tesseract::memory::pool::{EncryptedMemoryPool, SecurityLevel};
+    /// use tesseract_lib::memory::pool::{EncryptedMemoryPool, SecurityLevel};
     ///
     /// let pool = EncryptedMemoryPool::new(SecurityLevel::High).unwrap();
     /// ```
@@ -158,7 +158,7 @@ impl EncryptedMemoryPool {
     /// # Example
     ///
     /// ```no_run
-    /// # use tesseract::memory::pool::{EncryptedMemoryPool, SecurityLevel};
+    /// # use tesseract_lib::memory::pool::{EncryptedMemoryPool, SecurityLevel};
     /// let pool = EncryptedMemoryPool::new(SecurityLevel::Standard).unwrap();
     /// let allocation = pool.allocate(4096).unwrap();
     /// ```
@@ -264,7 +264,7 @@ impl EncryptedAllocation {
     /// # Example
     ///
     /// ```no_run
-    /// # use tesseract::memory::pool::{EncryptedMemoryPool, SecurityLevel};
+    /// # use tesseract_lib::memory::pool::{EncryptedMemoryPool, SecurityLevel};
     /// # let pool = EncryptedMemoryPool::new(SecurityLevel::Standard).unwrap();
     /// let mut allocation = pool.allocate(1024).unwrap();
     /// allocation.write(b"sensitive data").unwrap();
@@ -313,7 +313,7 @@ impl EncryptedAllocation {
     /// # Example
     ///
     /// ```no_run
-    /// # use tesseract::memory::pool::{EncryptedMemoryPool, SecurityLevel};
+    /// # use tesseract_lib::memory::pool::{EncryptedMemoryPool, SecurityLevel};
     /// # let pool = EncryptedMemoryPool::new(SecurityLevel::Standard).unwrap();
     /// # let mut allocation = pool.allocate(1024).unwrap();
     /// # allocation.write(b"data").unwrap();

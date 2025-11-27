@@ -20,7 +20,7 @@
 //! # Usage
 //!
 //! ```no_run
-//! use tesseract::memory::dump_protection::{disable_core_dumps, disable_crash_dumps};
+//! use tesseract_lib::memory::dump_protection::{disable_core_dumps, disable_crash_dumps};
 //!
 //! // Disable all memory dumps for this process
 //! disable_core_dumps().expect("Failed to disable core dumps");
@@ -71,7 +71,7 @@ pub type Result<T> = std::result::Result<T, DumpProtectionError>;
 /// # Example
 ///
 /// ```no_run
-/// use tesseract::memory::dump_protection::disable_core_dumps;
+/// use tesseract_lib::memory::dump_protection::disable_core_dumps;
 ///
 /// disable_core_dumps().expect("Failed to disable core dumps");
 /// ```
@@ -113,7 +113,7 @@ pub fn disable_core_dumps() -> Result<()> {
 /// # Example
 ///
 /// ```no_run
-/// use tesseract::memory::dump_protection::disable_crash_dumps;
+/// use tesseract_lib::memory::dump_protection::disable_crash_dumps;
 ///
 /// disable_crash_dumps().expect("Failed to disable crash dumps");
 /// ```
@@ -214,7 +214,7 @@ impl Default for PowerStateMonitor {
 /// # Example
 ///
 /// ```no_run
-/// use tesseract::memory::dump_protection::disable_all_dumps;
+/// use tesseract_lib::memory::dump_protection::disable_all_dumps;
 ///
 /// disable_all_dumps().expect("Failed to disable memory dumps");
 /// ```
@@ -230,7 +230,7 @@ pub fn disable_all_dumps() -> Result<()> {
 /// # Example
 ///
 /// ```no_run
-/// use tesseract::memory::dump_protection::DumpProtectionGuard;
+/// use tesseract_lib::memory::dump_protection::DumpProtectionGuard;
 ///
 /// {
 ///     let _guard = DumpProtectionGuard::new().expect("Failed to enable protection");

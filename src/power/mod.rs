@@ -63,7 +63,7 @@ pub type PowerCallback = Box<dyn Fn(PowerEvent) + Send + Sync>;
 /// # Example
 ///
 /// ```no_run
-/// use tesseract::power::{PowerMonitor, PowerEvent};
+/// use tesseract_lib::power::{PowerMonitor, PowerEvent};
 ///
 /// let mut monitor = PowerMonitor::new();
 ///

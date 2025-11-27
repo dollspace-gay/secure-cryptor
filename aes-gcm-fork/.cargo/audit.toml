@@ -1,5 +1,0 @@
-[advisories]
-ignore = [
-    "RUSTSEC-2023-0037", # xsalsa20poly1305 unmaintained
-]
-informational_warnings = ["unmaintained", "unsound"]

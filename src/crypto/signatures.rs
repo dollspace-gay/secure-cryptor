@@ -52,7 +52,7 @@ impl MlDsaKeyPair {
     /// # Example
     ///
     /// ```
-    /// use tesseract::crypto::signatures::{MlDsaKeyPair, SecurityLevel};
+    /// use tesseract_lib::crypto::signatures::{MlDsaKeyPair, SecurityLevel};
     ///
     /// // Use Level44 for smaller stack footprint in examples
     /// let keypair = MlDsaKeyPair::generate(SecurityLevel::Level44);
@@ -130,7 +130,7 @@ impl MlDsaKeyPair {
     /// # Example
     ///
     /// ```
-    /// use tesseract::crypto::signatures::{MlDsaKeyPair, SecurityLevel};
+    /// use tesseract_lib::crypto::signatures::{MlDsaKeyPair, SecurityLevel};
     ///
     /// // Use Level44 for smaller stack footprint in examples
     /// let keypair = MlDsaKeyPair::generate(SecurityLevel::Level44);
@@ -221,7 +221,7 @@ impl MlDsaKeyPair {
 /// # Example
 ///
 /// ```
-/// use tesseract::crypto::signatures::{MlDsaKeyPair, SecurityLevel, verify};
+/// use tesseract_lib::crypto::signatures::{MlDsaKeyPair, SecurityLevel, verify};
 ///
 /// // Use Level44 for smaller stack footprint in examples
 /// let keypair = MlDsaKeyPair::generate(SecurityLevel::Level44);
