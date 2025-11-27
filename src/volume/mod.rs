@@ -28,7 +28,10 @@ pub use migration::{VolumeMigration, MigrationBackup, MigrationError};
 pub use mount::{MountOptions, MountError};
 pub use operations::InMemoryFilesystem;
 pub use sector::{SectorCipher, SECTOR_SIZE_512, SECTOR_SIZE_4K};
-pub use io::{VolumeIO, VolumeIOError, StorageBackend, FileBackend, MemoryBackend, CacheStats, DEFAULT_CACHE_CAPACITY};
+pub use io::{
+    VolumeIO, VolumeIOError, StorageBackend, FileBackend, MemoryBackend, CacheStats, DEFAULT_CACHE_CAPACITY,
+    AsyncStorageBackend, AsyncResult, BlockingAdapter, S3Backend, DropboxBackend, AsyncMemoryBackend,
+};
 
 #[cfg(feature = "encrypted-volumes")]
 pub use mount::{mount, MountHandle};

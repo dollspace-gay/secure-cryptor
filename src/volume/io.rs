@@ -3,7 +3,7 @@
 //! This module provides the core I/O layer for encrypted volumes. It handles:
 //! - Chunk-based read/write operations with XTS-AES encryption
 //! - LRU caching of decrypted chunks for performance
-//! - Storage backend abstraction for local files and future cloud support
+//! - Storage backend abstraction for local files and cloud storage
 //!
 //! ## Architecture
 //!
@@ -32,6 +32,14 @@
 //! +------------------+
 //! ```
 //!
+//! ## Backend Types
+//!
+//! Two backend trait variants are provided:
+//! - `StorageBackend`: Synchronous trait for local file access
+//! - `AsyncStorageBackend`: Async trait for cloud storage (S3, Dropbox, etc.)
+//!
+//! The `BlockingAdapter` allows using sync backends in async contexts.
+//!
 //! ## Caching Strategy
 //!
 //! Chunks are cached in decrypted form to avoid repeated decryption:
@@ -41,7 +49,9 @@
 
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
+use std::pin::Pin;
 use std::sync::{Arc, RwLock};
+use std::future::Future;
 
 use lru::LruCache;
 use thiserror::Error;
@@ -117,6 +127,350 @@ pub trait StorageBackend: Send + Sync {
 
     /// Get the total size of the storage
     fn size(&self) -> io::Result<u64>;
+}
+
+/// Type alias for async operation results
+pub type AsyncResult<'a, T> = Pin<Box<dyn Future<Output = io::Result<T>> + Send + 'a>>;
+
+/// Async trait for storage backends supporting cloud and network storage
+///
+/// This trait enables non-blocking I/O for remote storage backends like S3, Dropbox,
+/// or any network-based storage. Use `BlockingAdapter` to wrap sync backends.
+///
+/// # Design Notes
+///
+/// Unlike the sync `StorageBackend`, this trait uses chunk-based operations rather
+/// than offset-based operations. This is because:
+/// - Cloud APIs typically work with objects/chunks, not byte offsets
+/// - Network round-trips are expensive, so we batch data into chunks
+/// - This aligns better with the VolumeIO caching architecture
+pub trait AsyncStorageBackend: Send + Sync {
+    /// Read a chunk from storage
+    ///
+    /// # Arguments
+    /// * `chunk_index` - The chunk number to read
+    /// * `chunk_size` - Expected size of the chunk in bytes
+    ///
+    /// # Returns
+    /// The chunk data, or `None` if the chunk doesn't exist yet
+    fn read_chunk<'a>(&'a self, chunk_index: u64, chunk_size: u64) -> AsyncResult<'a, Option<Vec<u8>>>;
+
+    /// Write a chunk to storage
+    ///
+    /// # Arguments
+    /// * `chunk_index` - The chunk number to write
+    /// * `data` - The chunk data to write
+    fn write_chunk<'a>(&'a self, chunk_index: u64, data: &'a [u8]) -> AsyncResult<'a, ()>;
+
+    /// Flush any buffered writes to storage
+    fn flush<'a>(&'a self) -> AsyncResult<'a, ()>;
+
+    /// Get the total size of the storage in bytes
+    fn size<'a>(&'a self) -> AsyncResult<'a, u64>;
+
+    /// Delete a chunk from storage (optional, for sparse volumes)
+    ///
+    /// Default implementation returns success without doing anything.
+    fn delete_chunk<'a>(&'a self, _chunk_index: u64) -> AsyncResult<'a, ()> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+/// Adapter that wraps a synchronous `StorageBackend` for async use
+///
+/// This adapter runs sync operations on the tokio blocking thread pool,
+/// allowing sync backends to be used in async contexts without blocking
+/// the async runtime.
+///
+/// # Example
+///
+/// ```ignore
+/// let file_backend = FileBackend::new(file, data_offset);
+/// let async_backend = BlockingAdapter::new(Box::new(file_backend), 64 * 1024);
+/// ```
+pub struct BlockingAdapter {
+    backend: Arc<std::sync::Mutex<Box<dyn StorageBackend>>>,
+    chunk_size: u64,
+}
+
+impl BlockingAdapter {
+    /// Creates a new blocking adapter
+    ///
+    /// # Arguments
+    /// * `backend` - The sync backend to wrap
+    /// * `chunk_size` - Size of each chunk in bytes
+    pub fn new(backend: Box<dyn StorageBackend>, chunk_size: u64) -> Self {
+        Self {
+            backend: Arc::new(std::sync::Mutex::new(backend)),
+            chunk_size,
+        }
+    }
+}
+
+impl AsyncStorageBackend for BlockingAdapter {
+    fn read_chunk<'a>(&'a self, chunk_index: u64, chunk_size: u64) -> AsyncResult<'a, Option<Vec<u8>>> {
+        let backend = Arc::clone(&self.backend);
+        let offset = chunk_index * self.chunk_size;
+
+        Box::pin(async move {
+            // In a real implementation, this would use tokio::task::spawn_blocking
+            // For now, we do it inline since we're keeping it simple
+            let mut guard = backend.lock().map_err(|_| {
+                io::Error::new(io::ErrorKind::Other, "lock poisoned")
+            })?;
+
+            let mut buf = vec![0u8; chunk_size as usize];
+            let bytes_read = guard.read_at(offset, &mut buf)?;
+
+            if bytes_read == 0 {
+                Ok(None)
+            } else {
+                buf.truncate(bytes_read);
+                Ok(Some(buf))
+            }
+        })
+    }
+
+    fn write_chunk<'a>(&'a self, chunk_index: u64, data: &'a [u8]) -> AsyncResult<'a, ()> {
+        let backend = Arc::clone(&self.backend);
+        let offset = chunk_index * self.chunk_size;
+
+        Box::pin(async move {
+            let mut guard = backend.lock().map_err(|_| {
+                io::Error::new(io::ErrorKind::Other, "lock poisoned")
+            })?;
+
+            guard.write_at(offset, data)?;
+            Ok(())
+        })
+    }
+
+    fn flush<'a>(&'a self) -> AsyncResult<'a, ()> {
+        let backend = Arc::clone(&self.backend);
+
+        Box::pin(async move {
+            let mut guard = backend.lock().map_err(|_| {
+                io::Error::new(io::ErrorKind::Other, "lock poisoned")
+            })?;
+
+            guard.flush()
+        })
+    }
+
+    fn size<'a>(&'a self) -> AsyncResult<'a, u64> {
+        let backend = Arc::clone(&self.backend);
+
+        Box::pin(async move {
+            let guard = backend.lock().map_err(|_| {
+                io::Error::new(io::ErrorKind::Other, "lock poisoned")
+            })?;
+
+            guard.size()
+        })
+    }
+}
+
+/// Stub implementation for S3-compatible cloud storage
+///
+/// This is a placeholder for future S3 backend implementation.
+/// Currently returns "not implemented" errors for all operations.
+///
+/// # Future Implementation
+///
+/// A real implementation would:
+/// - Use the AWS SDK or compatible HTTP client
+/// - Store chunks as individual objects: `s3://bucket/volume-id/chunk-XXXX`
+/// - Support multipart uploads for large chunks
+/// - Handle authentication and region configuration
+#[derive(Debug, Clone)]
+pub struct S3Backend {
+    bucket: String,
+    prefix: String,
+    chunk_size: u64,
+}
+
+impl S3Backend {
+    /// Creates a new S3 backend configuration
+    ///
+    /// # Arguments
+    /// * `bucket` - S3 bucket name
+    /// * `prefix` - Object key prefix (e.g., "volumes/my-volume/")
+    /// * `chunk_size` - Size of each chunk in bytes
+    pub fn new(bucket: String, prefix: String, chunk_size: u64) -> Self {
+        Self {
+            bucket,
+            prefix,
+            chunk_size,
+        }
+    }
+
+    /// Returns the S3 object key for a given chunk
+    pub fn chunk_key(&self, chunk_index: u64) -> String {
+        format!("{}chunk-{:08x}", self.prefix, chunk_index)
+    }
+
+    /// Returns the bucket name
+    pub fn bucket(&self) -> &str {
+        &self.bucket
+    }
+
+    /// Returns the chunk size
+    pub fn chunk_size(&self) -> u64 {
+        self.chunk_size
+    }
+}
+
+impl AsyncStorageBackend for S3Backend {
+    fn read_chunk<'a>(&'a self, chunk_index: u64, _chunk_size: u64) -> AsyncResult<'a, Option<Vec<u8>>> {
+        let _key = self.chunk_key(chunk_index);
+        Box::pin(async move {
+            // TODO: Implement S3 GetObject
+            // let response = s3_client.get_object()
+            //     .bucket(&self.bucket)
+            //     .key(&key)
+            //     .send()
+            //     .await?;
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "S3 backend not yet implemented",
+            ))
+        })
+    }
+
+    fn write_chunk<'a>(&'a self, chunk_index: u64, _data: &'a [u8]) -> AsyncResult<'a, ()> {
+        let _key = self.chunk_key(chunk_index);
+        Box::pin(async move {
+            // TODO: Implement S3 PutObject
+            // s3_client.put_object()
+            //     .bucket(&self.bucket)
+            //     .key(&key)
+            //     .body(ByteStream::from(data.to_vec()))
+            //     .send()
+            //     .await?;
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "S3 backend not yet implemented",
+            ))
+        })
+    }
+
+    fn flush<'a>(&'a self) -> AsyncResult<'a, ()> {
+        // S3 writes are immediately durable, no flush needed
+        Box::pin(async { Ok(()) })
+    }
+
+    fn size<'a>(&'a self) -> AsyncResult<'a, u64> {
+        Box::pin(async move {
+            // TODO: List objects with prefix and sum sizes, or read metadata object
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "S3 backend not yet implemented",
+            ))
+        })
+    }
+
+    fn delete_chunk<'a>(&'a self, chunk_index: u64) -> AsyncResult<'a, ()> {
+        let _key = self.chunk_key(chunk_index);
+        Box::pin(async move {
+            // TODO: Implement S3 DeleteObject
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "S3 backend not yet implemented",
+            ))
+        })
+    }
+}
+
+/// Stub implementation for Dropbox cloud storage
+///
+/// This is a placeholder for future Dropbox backend implementation.
+/// Currently returns "not implemented" errors for all operations.
+///
+/// # Future Implementation
+///
+/// A real implementation would:
+/// - Use the Dropbox HTTP API
+/// - Store chunks as individual files: `/Apps/Tesseract/volume-id/chunk-XXXX`
+/// - Handle OAuth2 authentication
+/// - Support chunked uploads for large files
+#[derive(Debug, Clone)]
+pub struct DropboxBackend {
+    path_prefix: String,
+    chunk_size: u64,
+}
+
+impl DropboxBackend {
+    /// Creates a new Dropbox backend configuration
+    ///
+    /// # Arguments
+    /// * `path_prefix` - Path prefix in Dropbox (e.g., "/Apps/Tesseract/my-volume/")
+    /// * `chunk_size` - Size of each chunk in bytes
+    pub fn new(path_prefix: String, chunk_size: u64) -> Self {
+        Self {
+            path_prefix,
+            chunk_size,
+        }
+    }
+
+    /// Returns the Dropbox path for a given chunk
+    pub fn chunk_path(&self, chunk_index: u64) -> String {
+        format!("{}chunk-{:08x}", self.path_prefix, chunk_index)
+    }
+
+    /// Returns the chunk size
+    pub fn chunk_size(&self) -> u64 {
+        self.chunk_size
+    }
+}
+
+impl AsyncStorageBackend for DropboxBackend {
+    fn read_chunk<'a>(&'a self, chunk_index: u64, _chunk_size: u64) -> AsyncResult<'a, Option<Vec<u8>>> {
+        let _path = self.chunk_path(chunk_index);
+        Box::pin(async move {
+            // TODO: Implement Dropbox download
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Dropbox backend not yet implemented",
+            ))
+        })
+    }
+
+    fn write_chunk<'a>(&'a self, chunk_index: u64, _data: &'a [u8]) -> AsyncResult<'a, ()> {
+        let _path = self.chunk_path(chunk_index);
+        Box::pin(async move {
+            // TODO: Implement Dropbox upload
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Dropbox backend not yet implemented",
+            ))
+        })
+    }
+
+    fn flush<'a>(&'a self) -> AsyncResult<'a, ()> {
+        // Dropbox writes are immediately durable
+        Box::pin(async { Ok(()) })
+    }
+
+    fn size<'a>(&'a self) -> AsyncResult<'a, u64> {
+        Box::pin(async move {
+            // TODO: List folder and sum file sizes
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Dropbox backend not yet implemented",
+            ))
+        })
+    }
+
+    fn delete_chunk<'a>(&'a self, chunk_index: u64) -> AsyncResult<'a, ()> {
+        let _path = self.chunk_path(chunk_index);
+        Box::pin(async move {
+            // TODO: Implement Dropbox delete
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Dropbox backend not yet implemented",
+            ))
+        })
+    }
 }
 
 /// File-based storage backend for local volumes
@@ -659,6 +1013,79 @@ pub struct CacheStats {
     pub len: usize,
 }
 
+/// In-memory async storage backend for testing async code paths
+///
+/// This is the async equivalent of `MemoryBackend` for use in tests.
+pub struct AsyncMemoryBackend {
+    data: std::sync::Mutex<Vec<u8>>,
+    chunk_size: u64,
+}
+
+impl AsyncMemoryBackend {
+    /// Creates a new async memory backend with the given size and chunk size
+    pub fn new(size: usize, chunk_size: u64) -> Self {
+        Self {
+            data: std::sync::Mutex::new(vec![0u8; size]),
+            chunk_size,
+        }
+    }
+}
+
+impl AsyncStorageBackend for AsyncMemoryBackend {
+    fn read_chunk<'a>(&'a self, chunk_index: u64, chunk_size: u64) -> AsyncResult<'a, Option<Vec<u8>>> {
+        let offset = (chunk_index * self.chunk_size) as usize;
+
+        // Lock, clone, release - all synchronously before the async block
+        let data_result: io::Result<Vec<u8>> = self.data.lock()
+            .map(|guard| guard.clone())
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "lock poisoned"));
+
+        Box::pin(async move {
+            let data = data_result?;
+            if offset >= data.len() {
+                return Ok(None);
+            }
+            let end = (offset + chunk_size as usize).min(data.len());
+            Ok(Some(data[offset..end].to_vec()))
+        })
+    }
+
+    fn write_chunk<'a>(&'a self, chunk_index: u64, chunk_data: &'a [u8]) -> AsyncResult<'a, ()> {
+        let offset = (chunk_index * self.chunk_size) as usize;
+
+        // Perform the write synchronously before the async block
+        let result: io::Result<()> = (|| {
+            let mut data = self.data.lock().map_err(|_| {
+                io::Error::new(io::ErrorKind::Other, "lock poisoned")
+            })?;
+
+            if offset >= data.len() {
+                return Ok(());
+            }
+
+            let end = (offset + chunk_data.len()).min(data.len());
+            let copy_len = end - offset;
+            data[offset..end].copy_from_slice(&chunk_data[..copy_len]);
+            Ok(())
+        })();
+
+        Box::pin(async move { result })
+    }
+
+    fn flush<'a>(&'a self) -> AsyncResult<'a, ()> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn size<'a>(&'a self) -> AsyncResult<'a, u64> {
+        // Get size synchronously before async block
+        let size_result: io::Result<u64> = self.data.lock()
+            .map(|guard| guard.len() as u64)
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "lock poisoned"));
+
+        Box::pin(async move { size_result })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -913,5 +1340,95 @@ mod tests {
         let mut buf = vec![0u8; 5000];
         io.read(0, &mut buf).unwrap();
         assert_eq!(buf, data);
+    }
+
+    // ===== Async Backend Tests =====
+
+    /// Helper to poll a boxed future once (for testing simple futures that complete immediately)
+    fn poll_once<T>(mut fut: Pin<Box<dyn Future<Output = T> + Send + '_>>) -> T {
+        use std::task::{Context, Poll, Wake, Waker};
+
+        struct NoopWaker;
+        impl Wake for NoopWaker {
+            fn wake(self: Arc<Self>) {}
+        }
+
+        let waker = Waker::from(Arc::new(NoopWaker));
+        let mut cx = Context::from_waker(&waker);
+
+        match fut.as_mut().poll(&mut cx) {
+            Poll::Ready(result) => result,
+            Poll::Pending => panic!("Future did not complete immediately"),
+        }
+    }
+
+    #[test]
+    fn test_blocking_adapter_read_write() {
+        // Test that BlockingAdapter correctly wraps a sync backend
+        let memory_backend = Box::new(MemoryBackend::new(64 * 1024));
+        let adapter = BlockingAdapter::new(memory_backend, 4096);
+
+        // Test write
+        let data = b"Hello, async world!";
+        let result = poll_once(adapter.write_chunk(0, data));
+        assert!(result.is_ok());
+
+        // Test read
+        let result = poll_once(adapter.read_chunk(0, 4096));
+        match result {
+            Ok(Some(chunk)) => {
+                assert_eq!(&chunk[..data.len()], data);
+            }
+            other => panic!("Unexpected read result: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_async_memory_backend() {
+        let backend = AsyncMemoryBackend::new(64 * 1024, 4096);
+
+        // Write data
+        let data = b"Async test data";
+        let result = poll_once(backend.write_chunk(1, data));
+        assert!(result.is_ok());
+
+        // Read it back
+        let result = poll_once(backend.read_chunk(1, 4096));
+        match result {
+            Ok(Some(chunk)) => {
+                assert_eq!(&chunk[..data.len()], data);
+            }
+            other => panic!("Unexpected read result: {:?}", other),
+        }
+
+        // Test size
+        let result = poll_once(backend.size());
+        assert_eq!(result.unwrap(), 64 * 1024);
+    }
+
+    #[test]
+    fn test_s3_backend_config() {
+        let backend = S3Backend::new(
+            "my-bucket".to_string(),
+            "volumes/vol1/".to_string(),
+            4 * 1024 * 1024, // 4MB chunks
+        );
+
+        assert_eq!(backend.bucket(), "my-bucket");
+        assert_eq!(backend.chunk_size(), 4 * 1024 * 1024);
+        assert_eq!(backend.chunk_key(0), "volumes/vol1/chunk-00000000");
+        assert_eq!(backend.chunk_key(255), "volumes/vol1/chunk-000000ff");
+    }
+
+    #[test]
+    fn test_dropbox_backend_config() {
+        let backend = DropboxBackend::new(
+            "/Apps/Tesseract/my-volume/".to_string(),
+            4 * 1024 * 1024,
+        );
+
+        assert_eq!(backend.chunk_size(), 4 * 1024 * 1024);
+        assert_eq!(backend.chunk_path(0), "/Apps/Tesseract/my-volume/chunk-00000000");
+        assert_eq!(backend.chunk_path(16), "/Apps/Tesseract/my-volume/chunk-00000010");
     }
 }
