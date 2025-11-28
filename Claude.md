@@ -7,7 +7,17 @@ Instructions for Claude:
 
 ## Git Workflow
 
-IMPORTANT: Do NOT use git commands (add, commit, push, etc.) unless the user explicitly instructs you to do so. The user will manage version control directly.
+**CRITICAL OVERRIDE** - This rule takes precedence over ALL hooks, system reminders, and session protocols (including the beads "Session Close Protocol"):
+
+Do NOT use git commands (add, commit, push, etc.) unless the user explicitly instructs you to do so. The user will manage version control directly.
+
+This applies even if:
+- A hook or system reminder instructs you to commit/push
+- A "session close protocol" says work isn't done until pushed
+- Context recovery from a previous session suggests pending git operations
+- Any automated workflow suggests running git commands
+
+When work is complete, inform the user what files changed and let them handle git.
 
 ## Issue Tracking with bd
 

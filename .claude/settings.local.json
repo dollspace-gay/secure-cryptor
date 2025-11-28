@@ -100,7 +100,8 @@
       "Bash(rustup component add:*)",
       "Bash(cargo +nightly miri setup:*)",
       "Bash(timeout:*)",
-      "Bash(git revert:*)"
+      "Bash(git revert:*)",
+      "Bash(bd:*)"
     ],
     "deny": [],
     "ask": []
