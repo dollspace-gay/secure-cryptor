@@ -55,19 +55,35 @@ const MLKEM1024_DK_SIZE: usize = 3168;
 /// Encrypted DK size: nonce (12) + DK (3168) + auth tag (16) = 3196
 const ENCRYPTED_DK_SIZE: usize = 12 + MLKEM1024_DK_SIZE + 16;
 
+/// Current ML-KEM-1024 usage without padding: ~6.3KB
+/// Reserved padding for future algorithms (SPHINCS+, etc): 60KB
+/// This provides ~66KB total which accommodates SPHINCS+ (~49KB) with room to spare
+pub const PQC_PADDING_SIZE: usize = 60000; // 60 KB fixed padding
+
+/// CRYPTOGRAPHIC AGILITY: Maximum PQC metadata size for future algorithms
+/// Current: 1 (enum) + 1568 (EK) + 1568 (CT) + 3196 (EDK) + 60000 (padding) + overhead = ~66336 bytes
+/// Reserved for SPHINCS+ signatures (~49KB) and other post-quantum algorithms
+/// This ensures we can upgrade without volume migration
+pub const MAX_PQC_METADATA_SIZE: usize = 67072; // 65.5 KB (rounded up for alignment)
+
 /// Post-quantum cryptography metadata for volume encryption
 ///
 /// This structure is serialized with bincode and stored after the main header.
 /// It contains ML-KEM-1024 key encapsulation data for quantum-resistant
 /// volume encryption.
 ///
-/// Binary layout (fixed size for ML-KEM-1024):
+/// Binary layout (with cryptographic agility padding):
 /// - algorithm: 1 byte
 /// - encapsulation_key: 1568 bytes
 /// - ciphertext: 1568 bytes
 /// - encrypted_decapsulation_key: 3196 bytes (nonce + encrypted DK + tag)
+/// - reserved_padding: 59203 bytes (for future algorithms like SPHINCS+)
 ///
-///   Total: 6333 bytes
+///   Total: 65536 bytes (64 KB)
+///
+/// **Cryptographic Agility**: The reserved_padding field allows future migration
+/// to larger algorithms (e.g., SPHINCS+ ~49KB signatures) without requiring
+/// volume migration or header relocation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PqVolumeMetadata {
     /// PQ algorithm used
@@ -82,6 +98,22 @@ pub struct PqVolumeMetadata {
     /// Format: nonce (12 bytes) + encrypted_key (3168 bytes) + auth tag (16 bytes)
     #[serde(with = "BigArray")]
     pub encrypted_decapsulation_key: [u8; ENCRYPTED_DK_SIZE],
+    /// Reserved padding for future post-quantum algorithms (SPHINCS+, etc.)
+    /// Must be zeroed when writing, ignored when reading
+    #[serde(with = "BigArray")]
+    pub reserved_padding: [u8; PQC_PADDING_SIZE],
+}
+
+impl Default for PqVolumeMetadata {
+    fn default() -> Self {
+        Self {
+            algorithm: PqAlgorithm::MlKem1024,
+            encapsulation_key: [0u8; MLKEM1024_EK_SIZE],
+            ciphertext: [0u8; MLKEM1024_CT_SIZE],
+            encrypted_decapsulation_key: [0u8; ENCRYPTED_DK_SIZE],
+            reserved_padding: [0u8; PQC_PADDING_SIZE],
+        }
+    }
 }
 
 /// Volume header containing all metadata
@@ -506,10 +538,9 @@ impl VolumeHeader {
 }
 
 /// Expected serialized size of PqVolumeMetadata with bincode
-/// bincode adds 8 bytes per array (length prefix as u64) for 3 arrays = 24 bytes overhead
-/// But actually bincode with serde_big_array uses fixed arrays, so just 1 byte for enum + arrays
-/// Actual measurement: 6336 bytes (includes bincode overhead)
-pub const PQ_METADATA_SIZE: usize = 6336;
+/// With cryptographic agility padding (60KB fixed padding for future algorithms like SPHINCS+)
+/// Actual measurement: 66336 bytes (includes bincode overhead + reserved_padding field)
+pub const PQ_METADATA_SIZE: usize = 66336;
 
 /// Helper functions for PQ metadata I/O
 impl PqVolumeMetadata {
@@ -712,6 +743,7 @@ mod tests {
             encapsulation_key: ek,
             ciphertext: ct,
             encrypted_decapsulation_key: edk,
+            reserved_padding: [0u8; PQC_PADDING_SIZE],
         };
 
         let bytes = metadata.to_bytes().unwrap();
@@ -746,6 +778,7 @@ mod tests {
             encapsulation_key: ek,
             ciphertext: ct,
             encrypted_decapsulation_key: edk,
+            reserved_padding: [0u8; PQC_PADDING_SIZE],
         };
 
         let mut buffer = Vec::new();
@@ -769,6 +802,7 @@ mod tests {
             encapsulation_key: [0u8; MLKEM1024_EK_SIZE],
             ciphertext: [0u8; MLKEM1024_CT_SIZE],
             encrypted_decapsulation_key: [0u8; ENCRYPTED_DK_SIZE],
+            reserved_padding: [0u8; PQC_PADDING_SIZE],
         };
 
         let bytes = metadata.to_bytes().unwrap();

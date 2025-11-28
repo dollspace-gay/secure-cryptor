@@ -131,6 +131,7 @@ wasm-bindgen-test = "0.3"
 prusti-contracts = "0.2"
 serde_json = "1.0"
 hex = "0.4"
+dudect-bencher = "0.6"
 
 # Kani only works on Unix systems (Linux/macOS), not Windows
 [target.'cfg(unix)'.dev-dependencies]
@@ -150,6 +151,10 @@ harness = false
 
 [[bench]]
 name = "pqc_benchmark"
+harness = false
+
+[[bench]]
+name = "constant_time"
 harness = false
 
 [profile.release]

@@ -23,7 +23,7 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
-use super::header::{VolumeHeader, PqVolumeMetadata, PqAlgorithm, HeaderError, HEADER_SIZE};
+use super::header::{VolumeHeader, PqVolumeMetadata, PqAlgorithm, HeaderError, HEADER_SIZE, PQC_PADDING_SIZE};
 use super::keyslot::{KeySlots, MasterKey, KeySlotError};
 use super::container::{PRIMARY_HEADER_OFFSET, KEYSLOTS_OFFSET, KEYSLOTS_SIZE};
 use crate::crypto::pqc::{MlKemKeyPair, encapsulate};
@@ -256,6 +256,7 @@ impl VolumeMigration {
             encapsulation_key: ek_bytes,
             ciphertext: ct_bytes,
             encrypted_decapsulation_key: edk_bytes,
+            reserved_padding: [0u8; PQC_PADDING_SIZE],
         };
 
         let pqc_metadata_bytes = pqc_metadata.to_bytes()?;

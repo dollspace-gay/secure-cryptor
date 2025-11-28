@@ -271,7 +271,7 @@ mod hybrid_mode_tests {
 
 #[cfg(test)]
 mod volume_pqc_tests {
-    use crate::volume::header::{VolumeHeader, PqVolumeMetadata, PqAlgorithm};
+    use crate::volume::header::{VolumeHeader, PqVolumeMetadata, PqAlgorithm, PQC_PADDING_SIZE};
     use crate::crypto::pqc::MlKemKeyPair;
 
     #[test]
@@ -294,6 +294,7 @@ mod volume_pqc_tests {
             encapsulation_key: ek_bytes,
             ciphertext: ct_bytes,
             encrypted_decapsulation_key: edk_bytes,
+            reserved_padding: [0u8; PQC_PADDING_SIZE],
         };
 
         let pq_size = pq_metadata.to_bytes().unwrap().len() as u32;
@@ -332,6 +333,7 @@ mod volume_pqc_tests {
             encapsulation_key: ek_bytes,
             ciphertext: ct_bytes,
             encrypted_decapsulation_key: edk_bytes,
+            reserved_padding: [0u8; PQC_PADDING_SIZE],
         };
 
         let pq_size = pq_metadata.to_bytes().unwrap().len() as u32;
@@ -376,6 +378,7 @@ mod volume_pqc_tests {
             encapsulation_key: ek_bytes,
             ciphertext: ct_bytes,
             encrypted_decapsulation_key: edk_bytes,
+            reserved_padding: [0u8; PQC_PADDING_SIZE],
         };
 
         let bytes = metadata.to_bytes().unwrap();

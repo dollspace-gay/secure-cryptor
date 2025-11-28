@@ -403,3 +403,139 @@ fn test_with_verification() {
 - Use guards for panic safety
 - Verify in critical code paths
 - Test scrubbing interfaces
+
+## Flash Memory Limitations
+
+### Important Warning: SSDs and Flash Storage
+
+Memory scrubbing is highly effective for RAM but has **significant limitations** when data has been written to flash-based storage (SSDs, NVMe drives, USB flash drives, SD cards, eMMC).
+
+### Why Flash Storage is Different
+
+Unlike RAM, flash memory has unique characteristics that make secure erasure challenging:
+
+1. **Wear Leveling**: Flash controllers spread writes across cells to extend drive life. When you "overwrite" a sector, the controller may write to a new physical location, leaving the old data intact.
+
+2. **Over-Provisioning**: SSDs reserve 7-28% of capacity for wear leveling and bad block replacement. This hidden space is inaccessible to the OS but may contain old data.
+
+3. **Write Amplification**: A single logical write may result in multiple physical writes, creating multiple copies of sensitive data.
+
+4. **Garbage Collection**: The flash controller decides when to actually erase blocks, which happens asynchronously and outside user control.
+
+5. **TRIM Limitations**: While TRIM marks blocks as unused, it doesn't guarantee immediate or secure erasure. Some controllers delay or batch TRIM operations.
+
+### Implications for Secure Cryptor
+
+| Scenario | RAM Scrubbing | Flash Scrubbing |
+|----------|---------------|-----------------|
+| In-memory keys | ✅ Effective | N/A |
+| Swap file on SSD | ⚠️ Limited | ⚠️ Limited |
+| Volume file on SSD | ❌ Cannot guarantee | ❌ Cannot guarantee |
+| Temporary files on SSD | ❌ Cannot guarantee | ❌ Cannot guarantee |
+
+### Mitigations
+
+#### 1. Disable Swap (Recommended for High Security)
+
+Prevent sensitive data from being written to disk swap:
+
+```rust
+// Already implemented in LockedMemory
+use secure_cryptor::memory::LockedMemory;
+let locked = LockedMemory::new(sensitive_data)?; // Prevents swapping
+```
+
+On Linux:
+```bash
+sudo swapoff -a  # Temporary
+# Or edit /etc/fstab to disable permanently
+```
+
+On Windows:
+```powershell
+# Disable page file (requires admin and reboot)
+wmic computersystem set AutomaticManagedPagefile=False
+wmic pagefileset delete
+```
+
+#### 2. Use Encrypted Swap
+
+If swap is required, enable encrypted swap:
+
+- **Linux**: Use dm-crypt for swap encryption
+- **Windows**: Enable BitLocker with swap encryption
+- **macOS**: Encrypted swap is enabled by default with FileVault
+
+#### 3. Full Disk Encryption
+
+For volume files stored on flash:
+- Use full disk encryption (BitLocker, LUKS, FileVault)
+- When you delete the volume file, the encrypted data remains but is cryptographically inaccessible
+- Rotate the FDE key if maximum security is required
+
+#### 4. Hardware Secure Erase
+
+For SSD decommissioning, use the drive's built-in secure erase:
+
+```bash
+# Linux (requires hdparm and drive support)
+hdparm --user-master u --security-set-pass password /dev/sdX
+hdparm --user-master u --security-erase password /dev/sdX
+```
+
+**Warning**: This erases the entire drive. Not suitable for individual file deletion.
+
+#### 5. Use RAM Disk for Sensitive Operations
+
+For maximum security, operate entirely in RAM:
+
+```bash
+# Linux: Create RAM disk
+mount -t tmpfs -o size=512M,mode=700 tmpfs /secure_workspace
+
+# Windows: Use third-party RAM disk software
+# Or use Secure Cryptor's in-memory volume mode
+```
+
+### What Secure Cryptor Does
+
+1. **Memory Locking**: Prevents sensitive data from being swapped to disk
+2. **RAM Scrubbing**: Securely erases in-memory data using volatile writes
+3. **Encrypted Memory Pool**: Encrypts sensitive data even while in RAM
+4. **Minimal Disk Writes**: Key material never intentionally written to disk
+
+### What Secure Cryptor Cannot Do
+
+1. **Retroactive SSD Erasure**: Cannot securely erase data already written to flash
+2. **Control Wear Leveling**: Cannot access SSD's internal block management
+3. **Guarantee TRIM**: Cannot force immediate secure erasure via TRIM
+4. **Access Over-Provisioned Space**: Cannot reach hidden SSD capacity
+
+### Recommendations by Security Level
+
+| Level | Storage | Swap | Additional |
+|-------|---------|------|------------|
+| Standard | Any | Encrypted | Use LockedMemory |
+| High | HDD preferred | Disabled | FDE + memory locking |
+| Maximum | RAM only | Disabled | Air-gapped + RAM disk |
+| Decommission | N/A | N/A | Crypto shredding or physical destruction |
+
+### Crypto Shredding
+
+The most reliable method for flash storage is **crypto shredding**:
+
+1. All data is encrypted with a master key
+2. The master key is stored only in RAM (never on flash)
+3. To "delete" data, simply destroy the master key
+4. The encrypted data on flash is now cryptographically inaccessible
+
+Secure Cryptor implements this pattern:
+- Volume master keys are never written to disk unencrypted
+- Key slots use Argon2id with high memory cost to derive keys
+- Destroying the password/key makes volume data irrecoverable
+
+### References
+
+- NIST SP 800-88 Rev. 1: Guidelines for Media Sanitization
+- Secure Deletion of Data from Magnetic and Solid-State Memory (IEEE S&P 2003)
+- Reliably Erasing Data From Flash-Based Solid State Drives (USENIX FAST 2011)

@@ -378,10 +378,13 @@ impl GuardedAllocation {
 
 impl Drop for GuardedAllocation {
     fn drop(&mut self) {
-        // Verify canaries before deallocation (panic if corrupted)
+        // SECURITY: Fail-Closed principle - canary corruption indicates UB/attack
+        // Program state is untrustworthy, immediately abort to prevent exploitation
         if !self.verify_canaries() {
-            eprintln!("WARNING: Buffer overflow detected during deallocation!");
-            // Don't panic in drop, but log the issue
+            // DO NOT log, unwind stack, or run any cleanup code
+            // An attacker may have corrupted function pointers or the heap
+            // The only safe action is immediate process termination
+            std::process::abort();
         }
 
         // Unprotect guard pages before deallocation

@@ -64,7 +64,7 @@ use rand::RngCore;
 use thiserror::Error;
 use zeroize::Zeroizing;
 
-use super::header::{VolumeHeader, PqVolumeMetadata, HEADER_SIZE};
+use super::header::{VolumeHeader, PqVolumeMetadata, HEADER_SIZE, PQC_PADDING_SIZE};
 use super::keyslot::{KeySlots, MasterKey};
 use crate::crypto::pqc::{MlKemKeyPair, encapsulate};
 use crate::crypto::streaming::{derive_hybrid_key};
@@ -109,21 +109,21 @@ pub const PRIMARY_HEADER_OFFSET: u64 = 0;
 
 /// Offset to PQ metadata section (for V2 volumes with post-quantum cryptography)
 /// Located after the primary header at 4KB offset
-/// Size: 8KB reserved (actual data ~6.3KB for ML-KEM-1024)
+/// Size: 65.5KB reserved (actual data ~64.8KB with cryptographic agility padding)
 pub const PQ_METADATA_OFFSET: u64 = HEADER_SIZE as u64; // 4KB
 
-/// Reserved size for PQ metadata section (8KB aligned)
-pub const PQ_METADATA_RESERVED: usize = 2 * HEADER_SIZE; // 8KB
+/// Reserved size for PQ metadata section (65.5KB for cryptographic agility - SPHINCS+ support)
+pub const PQ_METADATA_RESERVED: usize = super::header::MAX_PQC_METADATA_SIZE; // 67072 bytes (65.5KB)
 
 /// Offset to key slots section
-/// V2 layout: Header (4KB) + PQ Metadata (8KB) + Key Slots (8KB) = 20KB
-pub const KEYSLOTS_OFFSET: u64 = (HEADER_SIZE + PQ_METADATA_RESERVED) as u64; // 12KB
+/// V2 layout: Header (4KB) + PQ Metadata (65.5KB) + Key Slots (8KB) = 77.5KB
+pub const KEYSLOTS_OFFSET: u64 = (HEADER_SIZE + PQ_METADATA_RESERVED) as u64; // 71168 bytes (69.5KB)
 
 /// Size of the key slots section in bytes (8KB for 8 slots)
 pub const KEYSLOTS_SIZE: usize = 8192;
 
 /// Offset to encrypted data area (after all metadata)
-pub const DATA_AREA_OFFSET: u64 = KEYSLOTS_OFFSET + KEYSLOTS_SIZE as u64; // 20KB
+pub const DATA_AREA_OFFSET: u64 = KEYSLOTS_OFFSET + KEYSLOTS_SIZE as u64; // 79360 bytes (77.5KB)
 
 /// Total size of container metadata (headers + PQ metadata + key slots)
 pub const METADATA_SIZE: usize = DATA_AREA_OFFSET as usize;
@@ -300,6 +300,7 @@ impl Container {
             encapsulation_key: ek_bytes,
             ciphertext: ct_bytes,
             encrypted_decapsulation_key: edk_bytes,
+            reserved_padding: [0u8; PQC_PADDING_SIZE],
         };
 
         // Serialize PQ metadata to get size
@@ -347,10 +348,10 @@ impl Container {
         // Then pad to align key slots at KEYSLOTS_OFFSET
         let pq_bytes = pq_metadata.to_bytes()?;
         let mut pq_section = pq_bytes;
-        pq_section.resize(PQ_METADATA_RESERVED, 0); // Pad to 8KB
+        pq_section.resize(PQ_METADATA_RESERVED, 0); // Pad to 65.5KB (cryptographic agility)
         file.write_all(&pq_section)?;
 
-        // Key slots written at KEYSLOTS_OFFSET (12KB)
+        // Key slots written at KEYSLOTS_OFFSET (69.5KB)
         // Serialize and write key slots
         let keyslots_bytes = bincode::serialize(&key_slots)?;
         if keyslots_bytes.len() > KEYSLOTS_SIZE {
@@ -1685,6 +1686,7 @@ mod tests {
             encapsulation_key: [0u8; 1568],
             ciphertext: [0u8; 1568],
             encrypted_decapsulation_key: [0u8; 3196],
+            reserved_padding: [0u8; PQC_PADDING_SIZE],
         };
         let bytes = metadata.to_bytes().unwrap();
         assert!(bytes.len() <= PQ_METADATA_RESERVED,
