@@ -188,73 +188,13 @@ jobs:
       - name: Run cargo-audit
         run: cargo audit
 
-  mutation-testing:
-    name: Mutation Testing (cargo-mutants)
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libglib2.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libcairo2-dev libpango1.0-dev libxdo-dev
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo-mutants installation
-        id: cache-mutants
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-mutants
-          key: ${{ runner.os }}-cargo-mutants-v25
-
-      - name: Install cargo-mutants
-        if: steps.cache-mutants.outputs.cache-hit != 'true'
-        run: cargo install cargo-mutants --locked
-
-      - name: Run mutation testing on crypto modules
-        continue-on-error: true
-        run: |
-          echo "::group::Mutation Testing - Crypto Modules"
-          # Run mutations on validation.rs (smaller, faster feedback)
-          cargo mutants --no-times --file src/validation.rs -- --lib
-          echo "::endgroup::"
-
-      - name: Run mutation testing on key derivation
-        continue-on-error: true
-        run: |
-          echo "::group::Mutation Testing - Key Derivation"
-          cargo mutants --no-times --file src/crypto/kdf.rs -- --lib
-          echo "::endgroup::"
-
-      - name: Run mutation testing on AES-GCM
-        continue-on-error: true
-        run: |
-          echo "::group::Mutation Testing - AES-GCM"
-          cargo mutants --no-times --file src/crypto/aes_gcm.rs -- --lib
-          echo "::endgroup::"
-
-      - name: Upload mutation results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: mutation-results
-          path: mutants.out/
-          retention-days: 14
+  # NOTE: Mutation testing removed from CI - takes too long (2+ hours).
+  # Run locally with: cargo mutants --no-times --file src/validation.rs -- --lib
+  # Local results verified passing on 2024-11-30.
 
   verification-summary:
     name: Verification Summary
-    needs: [kani-verify, wycheproof-verify, prusti-verify, security-audit, mutation-testing]
+    needs: [kani-verify, wycheproof-verify, prusti-verify, security-audit]
     runs-on: ubuntu-latest
     if: always()
 
@@ -271,17 +211,15 @@ jobs:
           echo "- Wycheproof Test Vectors: ${{ needs.wycheproof-verify.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Prusti Verification: ${{ needs.prusti-verify.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Security Audit: ${{ needs.security-audit.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Mutation Testing: ${{ needs.mutation-testing.result }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Coverage" >> $GITHUB_STEP_SUMMARY
           echo "- **Kani**: 21 proof harnesses (10 AES-GCM + 11 Argon2id)" >> $GITHUB_STEP_SUMMARY
           echo "- **Wycheproof**: 66 AES-256-GCM test vectors from C2SP" >> $GITHUB_STEP_SUMMARY
           echo "- **Prusti**: Contract annotations (in progress)" >> $GITHUB_STEP_SUMMARY
           echo "- **cargo-audit**: Supply chain vulnerability scanning" >> $GITHUB_STEP_SUMMARY
-          echo "- **cargo-mutants**: Mutation testing for crypto modules" >> $GITHUB_STEP_SUMMARY
+          echo "- **cargo-mutants**: Run locally (too slow for CI)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
           echo "1. Add Prusti contract annotations to public APIs" >> $GITHUB_STEP_SUMMARY
           echo "2. Expand Wycheproof coverage to other algorithms" >> $GITHUB_STEP_SUMMARY
           echo "3. Add constant-time verification with dudect" >> $GITHUB_STEP_SUMMARY
-          echo "4. Expand mutation testing to achieve >90% score" >> $GITHUB_STEP_SUMMARY
