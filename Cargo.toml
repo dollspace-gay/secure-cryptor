@@ -92,7 +92,8 @@ clap = { version = "4.5", features = ["derive"] }
 tempfile = "3.23"
 eframe = "0.29"
 rfd = "0.15"
-tokio = { version = "1", features = ["full"] }
+# Minimal tokio features - no networking to reduce attack surface
+tokio = { version = "1", features = ["fs", "sync", "rt", "macros", "time"] }
 dirs = "5.0"
 notify-rust = "4.11"
 tray-icon = "0.21"
